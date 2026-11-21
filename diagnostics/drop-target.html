@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Clan Hub drag diagnostic</title>
+<style>
+  body{font:16px system-ui,sans-serif;background:#171b16;color:#eee;padding:24px;max-width:900px;margin:auto}
+  #target{border:2px dashed #9db486;border-radius:12px;padding:70px 20px;text-align:center;margin:24px 0}
+  #target.over{background:#34442e}
+  pre{background:#242b21;padding:16px;white-space:pre-wrap;overflow-wrap:anywhere}
+  button{font:inherit;padding:8px 12px}
+</style>
+<h1>Drag diagnostic</h1>
+<p>Drop one or more JPEGs here. Repeat with the same files from Clan Hub and Dolphin.</p>
+<div id="target">Drop files here</div>
+<button id="clear">Clear report</button>
+<pre id="events">Event counts: dragenter 0 · dragover 0 · dragleave 0 · drop 0</pre>
+<pre id="report">Waiting for a drop.</pre>
+<script>
+  const target=document.getElementById('target');
+  const report=document.getElementById('report');
+  const events=document.getElementById('events');
+  const counts={dragenter:0,dragover:0,dragleave:0,drop:0};
+  const eventTypes={dragenter:[],dragover:[],dragleave:[],drop:[]};
+  const eventEffects={dragenter:null,dragover:null,dragleave:null,drop:null};
+  function count(name,transfer){counts[name]++;eventTypes[name]=[...transfer.types];eventEffects[name]={effectAllowed:transfer.effectAllowed,dropEffect:transfer.dropEffect};events.textContent=`Event counts: dragenter ${counts.dragenter} · dragover ${counts.dragover} · dragleave ${counts.dragleave} · drop ${counts.drop}\nLast types: ${JSON.stringify(eventTypes)}\nLast effects: ${JSON.stringify(eventEffects)}`}
+  let overTypes=[];
+  target.addEventListener('dragenter',event=>{count('dragenter',event.dataTransfer);event.preventDefault();target.classList.add('over');overTypes=[...event.dataTransfer.types]});
+  target.addEventListener('dragover',event=>{count('dragover',event.dataTransfer);event.preventDefault();event.dataTransfer.dropEffect='copy';overTypes=[...event.dataTransfer.types]});
+  target.addEventListener('dragleave',event=>{count('dragleave',event.dataTransfer);target.classList.remove('over')});
+  target.addEventListener('drop',async event=>{
+    count('drop',event.dataTransfer);
+    event.preventDefault();target.classList.remove('over');
+    const transfer=event.dataTransfer;
+    const files=[...transfer.files];
+    const result={
+      dragoverTypes:overTypes,
+      dropTypes:[...transfer.types],
+      eventCounts:{...counts},
+      lastEventTypes:{...eventTypes},
+      lastEventEffects:{...eventEffects},
+      hasFiles:transfer.types.includes('Files'),
+      hasUriList:transfer.types.includes('text/uri-list'),
+      itemCount:transfer.items.length,
+      items:[...transfer.items].map(item=>({kind:item.kind,type:item.type})),
+      fileCount:files.length,
+      files:[],
+      uriList:transfer.getData('text/uri-list')||null,
+      textPlain:transfer.getData('text/plain')||null
+    };
+    for(const file of files){
+      const info={name:file.name,size:file.size,type:file.type};
+      try{
+        const bytes=new Uint8Array(await file.slice(0,3).arrayBuffer());
+        info.readable=true;
+        info.firstBytes=[...bytes].map(byte=>byte.toString(16).padStart(2,'0')).join(' ');
+        info.jpegSignature=bytes[0]===0xff&&bytes[1]===0xd8&&bytes[2]===0xff;
+      }catch(error){info.readable=false;info.readError=error.message}
+      result.files.push(info);
+    }
+    report.textContent=JSON.stringify(result,null,2);
+  });
+  document.getElementById('clear').addEventListener('click',()=>{report.textContent='Waiting for a drop.';overTypes=[];for(const name of Object.keys(counts)){counts[name]=0;eventTypes[name]=[];eventEffects[name]=null}events.textContent='Event counts: dragenter 0 · dragover 0 · dragleave 0 · drop 0'});
+</script>
+</html>

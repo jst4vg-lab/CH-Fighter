@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Native JPEG drag test</title>
+<style>
+  body{font:16px system-ui,sans-serif;background:#171b16;color:#eee;padding:20px}
+  .source{display:inline-block;vertical-align:top;width:180px;min-height:110px;margin:8px;padding:20px;
+    background:#33442e;border:2px solid #9db486;border-radius:10px;cursor:grab;user-select:none}
+  pre{white-space:pre-wrap;background:#242b21;padding:12px}
+</style>
+<h1>Native JPEG drag test</h1>
+<p>Drag either box onto the inspector. Both offer the same JPEG.</p>
+<div class="source" draggable="true" data-form="file">Electron <code>file</code></div>
+<div class="source" draggable="true" data-form="files">Electron <code>files: [file]</code></div>
+<div class="source" draggable="true" data-form="two-files">Electron <code>files: [two JPEGs]</code></div>
+<pre id="log">Waiting for dragstart.</pre>
+<script>
+  const log=document.getElementById('log');
+  function record(message){log.textContent+=`\n${new Date().toISOString()} ${message}`}
+  document.querySelectorAll('.source').forEach(source=>{
+    source.addEventListener('dragstart',event=>{
+      event.preventDefault();
+      record(`dragstart ${source.dataset.form}; defaultPrevented=${event.defaultPrevented}; target=${event.target.tagName}`);
+      window.dragDiagnostic.start(source.dataset.form);
+      record(`IPC sent ${source.dataset.form}`);
+    });
+    source.addEventListener('dragend',event=>record(`dragend ${source.dataset.form}; dropEffect=${event.dataTransfer.dropEffect}`));
+  });
+  window.dragDiagnostic.onError(message=>record(`Electron error: ${message}`));
+</script>
+</html>

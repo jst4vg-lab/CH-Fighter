@@ -1,0 +1,11 @@
+Crea/
+data/
+node_modules/
+dist/
+__pycache__/
+.pytest_cache/
+.venv/
+*.pyc
+build/
+release/
+*.spec
