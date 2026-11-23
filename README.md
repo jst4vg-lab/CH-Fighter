@@ -132,3 +132,17 @@ The Discord **Teams** board starts with participants from loaded messages. Drag 
 Link previews show images supplied by Discord. Forwarded posts show the full available snapshot, including its text, attachments, embeds, and original timestamp. Discord leaves the original author out of snapshots.
 
 **Team colors** switches member names, message lines, and mentions from Discord role colors to team colors. Type `@` in the composer and select a member or role to mention them. **Settings → Gallery order** saves branch tabs and per-branch type sections for desktop and mobile.
+
+## Security checks and development
+
+The standalone browser receives a per-launch CSRF token from /api/security. Mutations require that token and JSON request bodies. The desktop adds its own main-frame credential. Mobile requests keep the paired cookie and exact HTTPS Origin checks.
+
+For Vite development, allow its origin when starting the backend with CH_DEV_ORIGINS=http://127.0.0.1:5173 .venv/bin/python server.py.
+
+Requests have a 1 MB body limit, a 15-second socket read timeout, and a 32-handler limit. Pairing codes expire after five minutes or five failed guesses. Pairing allows ten attempts per minute globally.
+
+Dependencies are tested with Electron 45.4.1, electron-builder 26.18.0, pip 26.3, and the separate pinned Python lockfiles. The two minimatch overrides retain the packaging tool's existing named-export interface while updating vulnerable glob matching. Use npm ci and install each Python lockfile in its own environment.
+
+Install Gitleaks 8.30.1 and pip-audit 2.10.1 and add them to PATH. Run npm run security:check before packaging, then npm run security:release against release/linux-unpacked. The checks scan Git history, publishable source, dependency advisories, and release resources. The GitHub workflow runs the same gates on pushes and pull requests. Credential values stay redacted.
+
+Discord CDN images load automatically. Other public HTTPS images require a click. All remote image requests pass through the authenticated backend, which validates DNS and every redirect, pins the connection to a public address, validates TLS, and limits format, size, and duration. The image viewer uses the same policy. SVG and non-image responses are blocked. App-owned state uses private filesystem permissions.

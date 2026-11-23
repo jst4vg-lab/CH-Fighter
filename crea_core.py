@@ -27,8 +27,10 @@ RENDER_VERSION = 'readable-bar-v3'
 BAR_FONT = Path(os.environ.get('CH_FONT_PATH', ROOT / 'assets' / 'fonts' / 'NotoSans-Bold.ttf'))
 
 def db():
-    DB.parent.mkdir(parents=True,exist_ok=True)
+    from private_data import secure_data
+    secure_data(DB.parent)
     con = sqlite3.connect(DB, timeout=30)
+    secure_data(DB.parent)
     con.row_factory = sqlite3.Row
     con.execute('pragma journal_mode=wal')
     con.execute('pragma foreign_keys=on')

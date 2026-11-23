@@ -1,6 +1,7 @@
 import React,{useEffect,useRef,useState} from 'react';
 import {CornerUpLeft,Forward,ExternalLink,Reply,SmilePlus,X} from 'lucide-react';
 import {messageGroups} from './discordGroups.js';
+import SecureImage from './SecureImage.jsx';
 import DiscordEmoji from './DiscordEmoji.jsx';
 import DiscordMentionText,{TEAM_COLORS} from './DiscordMentionText.jsx';
 
@@ -28,7 +29,7 @@ function ImageViewer({image,onDismiss}){
    <button type="button" autoFocus aria-label="Close image" onClick={onDismiss}><X size={18}/></button>
   </div>
   <div className={`discordImageCanvas ${actual?'actual':''}`} tabIndex={0}>
-   <img src={image.url} alt={image.name} referrerPolicy="no-referrer"/>
+   <SecureImage src={image.url} alt={image.name} consent/>
   </div>
  </dialog>;
 }
@@ -66,12 +67,15 @@ function MessageBody({message,onImage,known,colorFor}){
  for(const sticker of message.stickers||[]){
   if(!sticker.url.endsWith('.json'))addImage(`sticker:${sticker.id}`,sticker.name,imageUrl(sticker.url));
  }
+ const [consented,setConsented]=useState(new Set());
  return <>
   {message.content&&<p><DiscordMentionText text={message.content} known={known} colorFor={colorFor}/></p>}
   {images.length>0&&<div className="commImageGrid" aria-label="Message images">
-   {images.map(item=><button type="button" key={item.id} aria-label={`Open ${item.name}`} onClick={()=>onImage(item)}>
-    <img src={item.url} alt={item.name} loading="lazy" referrerPolicy="no-referrer"/>
-   </button>)}
+   {images.map(item=><div className="secureImageTile" key={item.id} tabIndex={0} role="button" aria-label={`Open ${item.name}`}
+    onClick={()=>onImage(item)} onKeyDown={event=>{if(event.key==='Enter'&&event.target===event.currentTarget)onImage(item)}}>
+    <SecureImage src={item.url} alt={item.name} loading="lazy" consent={consented.has(item.url)}
+     onConsent={url=>setConsented(current=>new Set([...current,url]))}/>
+   </div>)}
   </div>}
   {attachments.filter(item=>!seen.has(item.url)).map(item=>
    <a key={item.id} href={item.url} target="_blank" rel="noreferrer">{item.name}</a>)}
@@ -95,7 +99,7 @@ const clock=new Intl.DateTimeFormat(undefined,{
 function Avatar({author}){
  const [failed,setFailed]=useState(false);
  return author.avatar_url&&!failed
-  ?<img className="commAvatar" src={author.avatar_url} alt="" onError={()=>setFailed(true)}/>
+  ?<SecureImage className="commAvatar" src={author.avatar_url} alt="" onError={()=>setFailed(true)}/>
   :<span className="commAvatar commAvatarPlaceholder" aria-hidden="true">{authorName(author)?.slice(0,1)}</span>;
 }
 

@@ -1,9 +1,10 @@
+import {apiFetch} from './api.js';
 import React,{useEffect,useLayoutEffect,useRef,useState} from 'react';
 import './workspace.css';
 import DiscordMessages,{authorName,messageExcerpt} from './DiscordMessages.jsx';
 import DiscordTeamBoard from './DiscordTeamBoard.jsx';
 
-async function api(path,body,signal){const response=await fetch('/api'+path,{signal,method:body===undefined?'GET':'POST',headers:body===undefined?{}:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});const data=await response.json();if(!response.ok)throw Error(data.error||'Workspace request failed');return data}
+async function api(path,body,signal){const response=await apiFetch('/api'+path,{signal,method:body===undefined?'GET':'POST',headers:body===undefined?{}:{'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});const data=await response.json();if(!response.ok)throw Error(data.error||'Workspace request failed');return data}
 
 function mergeMessages(older,newer){
  const byId=new Map([...older,...newer].map(message=>[message.id,message]));

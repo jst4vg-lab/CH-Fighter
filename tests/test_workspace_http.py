@@ -10,7 +10,8 @@ class WorkspaceHandlerTests(unittest.TestCase):
     def test_workspace_initializes_and_routes_local_requests(self):
         with tempfile.TemporaryDirectory() as directory, patch('crea_core.DB', Path(directory) / 'app.sqlite'), patch.object(server, 'DESKTOP_SECRET', ''), patch.object(server, 'REMOTE_HOST', ''):
             handler = server.Handler.__new__(server.Handler)
-            handler.headers = {'Host': '127.0.0.1'}
+            handler.server = __import__('types').SimpleNamespace(server_port=8765)
+            handler.headers = {'Host': '127.0.0.1:8765','X-CH-CSRF':server.api_security.CSRF_TOKEN}
             handler.send_json = lambda data, status=200: (data, status)
             handler.path = '/api/workspace/draft'
             first, status = handler.do_GET()

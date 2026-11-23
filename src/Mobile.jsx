@@ -1,3 +1,4 @@
+import {apiFetch} from './api.js';
 import {orderedCodes} from './galleryOrder.js';
 import React,{useCallback,useEffect,useMemo,useRef,useState} from 'react';
 import useEmblaCarousel from 'embla-carousel-react';
@@ -10,7 +11,7 @@ const defaultBranchIds=Object.keys(branches);
 const imageUrl=item=>`/api/image/${item.id}/thumb?rev=${item.render_key||''}`;
 const hotKey=hot=>hot?JSON.stringify([hot.id,hot.items.map(item=>[item.id,item.missing])]):'';
 const packageSignature=stage=>JSON.stringify([stage.hot&&[stage.hot.id,stage.hot.items.map(i=>i.id)],stage.reserve.map(p=>[p.id,p.items.map(i=>i.id)])]);
-async function api(path,body){const response=await fetch('/api'+path,{method:body?'POST':'GET',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});if(!response.ok)throw Error((await response.json().catch(()=>({}))).error||`Request failed (${response.status})`);return response.json()}
+async function api(path,body){const response=await apiFetch('/api'+path,{method:body?'POST':'GET',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});if(!response.ok)throw Error((await response.json().catch(()=>({}))).error||`Request failed (${response.status})`);return response.json()}
 
 function PackageImages({items}){return <span className="mobilePackageImages" aria-hidden="true">{items.slice(0,3).map((item,index)=><img key={`${item.id}-${index}`} src={imageUrl(item)} alt=""/>)}</span>}
 

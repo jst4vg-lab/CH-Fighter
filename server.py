@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import api_security
+import remote_media
 import os
 import argparse
 import signal
@@ -39,7 +41,8 @@ CLIPBOARD_PENDING=None
 CONNECTIONS = ConnectionManager()
 
 def host_name(value):
-    return (value or '').split(':',1)[0].lower()
+    parsed = api_security.authority(value)
+    return parsed[0] if parsed else ''
 
 def background_format():
     global BUSY
@@ -56,19 +59,42 @@ def format_worker():
 
 class Handler(BaseHTTPRequestHandler):
     def mobile_request(self):
-        return bool(REMOTE_HOST and host_name(self.headers.get('Host')) == REMOTE_HOST)
+        return bool(REMOTE_HOST and api_security.authority(self.headers.get('Host')) in
+                    ((REMOTE_HOST, None), (REMOTE_HOST, 443)))
+
+    def local_origin(self):
+        port = self.server.server_port
+        return [f'http://127.0.0.1:{port}', f'http://localhost:{port}']
+
+    def valid_origin(self):
+        origin = self.headers.get('Origin')
+        origins = self.local_origin()
+        origins += [value.strip() for value in os.environ.get('CH_DEV_ORIGINS', '').split(',') if value.strip()]
+        return origin is None or any(api_security.same_origin(origin, allowed) for allowed in origins)
+
 
     def allowed(self, method, path):
-        host=host_name(self.headers.get('Host'))
-        if host not in ('127.0.0.1','localhost',REMOTE_HOST) or not host:
+        if len(api_security.headers_all(self.headers, 'Host')) != 1:
+            return False
+        if len(api_security.headers_all(self.headers, 'Origin')) > 1:
+            return False
+        target = api_security.authority(self.headers.get('Host'))
+        if target is None:
             return False
         if not self.mobile_request():
+            port = self.server.server_port
+            if target not in (('127.0.0.1', port), ('localhost', port)):
+                return False
+            if not self.valid_origin():
+                return False
             if DESKTOP_SECRET and path.startswith('/api/'):
                 return hmac.compare_digest(self.headers.get('X-CH-Desktop',''),DESKTOP_SECRET)
+            if method == 'POST':
+                return api_security.token_matches(self.headers)
             return True
         if method=='POST' and self.headers.get('Origin') != f'https://{REMOTE_HOST}': return False
         if path=='/api/mobile/pair' and method=='POST': return True
-        if method=='GET' and (path in ('/mobile','/manifest.webmanifest','/mobile-sw.js','/api/mobile/session') or path.startswith(('/assets/','/icons/'))): return True
+        if method=='GET' and (path in ('/api/security','/mobile','/manifest.webmanifest','/mobile-sw.js','/api/mobile/session') or path.startswith(('/assets/','/icons/'))): return True
         if not mobile_auth.valid(self.headers.get('Cookie')): return False
         if method=='GET':
             if re.fullmatch(r'/api/mobile/clipboard/[0-9a-f-]{36}',path): return True
@@ -82,21 +108,47 @@ class Handler(BaseHTTPRequestHandler):
 
     def log_message(self, format, *args):
         if len(args)>1 and str(args[1]).startswith(('4','5')):
-            super().log_message(format,*args)
+            # Exclude query strings, cookies, and request bodies from diagnostics.
+            super().log_message('%s %s %s', self.command, urlparse(self.path).path, args[1])
 
     def send_json(self,data,status=200):
         body=json.dumps(data).encode(); self.send_response(status)
-        self.send_header('Content-Type','application/json');self.send_header('Content-Length',str(len(body)))
+        self.send_header('Cache-Control','no-store');self.send_header('Content-Type','application/json');self.send_header('Content-Length',str(len(body)))
         self.end_headers();self.wfile.write(body)
 
+    def end_headers(self):
+        self.send_header('Content-Security-Policy', api_security.CSP)
+        self.send_header('X-Content-Type-Options', 'nosniff')
+        self.send_header('Referrer-Policy', 'no-referrer')
+        self.send_header('Cross-Origin-Resource-Policy', 'same-origin')
+        super().end_headers()
+
     def body(self):
-        length=int(self.headers.get('Content-Length','0'))
-        if length>1000000: raise ValueError('Request too large')
-        return json.loads(self.rfile.read(length) or b'{}')
+        return api_security.read_json(self)
+
+    def framing_error(self, error):
+        self.close_connection = True
+        return self.send_json({'error': str(error)}, error.status)
 
     def do_GET(self):
         u=urlparse(self.path); p=u.path
         if not self.allowed('GET',p): return self.send_error(403)
+        try: api_security.body_length(self.headers, required=False)
+        except api_security.RequestError as error: return self.framing_error(error)
+        if p=='/api/media':
+            try:
+                query=parse_qs(u.query)
+                mime,body=remote_media.fetch_image(query.get('url',[''])[0],query.get('consent',[''])[0]=='1')
+            except remote_media.MediaError as error:
+                return self.send_json({'error':str(error)},400)
+            self.send_response(200)
+            self.send_header('Content-Type',mime)
+            self.send_header('Content-Length',str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if p=='/api/security':
+            return self.send_json({'csrf_token': None if self.mobile_request() else api_security.CSRF_TOKEN})
         if p=='/api/desktop/clipboard-request':
             global CLIPBOARD_PENDING
             with CLIPBOARD_LOCK:
@@ -179,8 +231,11 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         global BUSY
         try:
-            p=urlparse(self.path).path; body=self.body()
-            if not self.allowed('POST',p): return self.send_error(403)
+            p=urlparse(self.path).path
+            if not self.allowed('POST',p):
+                self.close_connection = True
+                return self.send_error(403)
+            body=self.body()
             if p=='/api/mobile/clipboard':
                 global CLIPBOARD_PENDING
                 package_id=body.get('package_id')
@@ -204,7 +259,13 @@ class Handler(BaseHTTPRequestHandler):
                     request['error']=str(body.get('error','Clipboard failed'))[:300] if request['status']=='error' else None
                 return self.send_json({'ok':True})
             if p=='/api/mobile/pair':
-                token=mobile_auth.pair(body.get('code'))
+                try: token=mobile_auth.pair(body.get('code'))
+                except mobile_auth.PairingThrottled:
+                    self.send_response(429)
+                    self.send_header('Retry-After', '60')
+                    self.send_header('Content-Length', '0')
+                    self.end_headers()
+                    return
                 if not token:return self.send_json({'error':'Invalid or expired code'},401)
                 payload=b'{"paired":true}'
                 self.send_response(200)
@@ -283,23 +344,26 @@ class Handler(BaseHTTPRequestHandler):
                 if cur.rowcount==0:con.close();return self.send_json({'error':'Asset not found'},404)
                 con.commit();con.close();background_format();return self.send_json({'ok':True})
             return self.send_error(404)
+        except api_security.RequestError as error:return self.framing_error(error)
         except ValueError as exc:return self.send_json({'error':str(exc)},400)
-        except Exception as exc: return self.send_json({'error':str(exc)},500)
+        except Exception: return self.send_json({'error':'Internal application error'},500)
 
 if __name__=='__main__':
+    from private_data import initialize
     parser=argparse.ArgumentParser()
     parser.add_argument('--port',type=int,default=8765)
     args=parser.parse_args()
     if os.environ.get('CH_DESKTOP') == '1':
         from desktop_data import migrate
         migrate(Path(os.environ['CH_LEGACY_DATA']), DATA)
+    initialize(DATA)
     db().close()
     composer.recover()
     mobile_auth.setup()
     CONNECTIONS.start()
     threading.Thread(target=format_worker,daemon=True).start()
     background_format()
-    server=ThreadingHTTPServer(('127.0.0.1',args.port),Handler)
+    server=api_security.LocalHTTPServer(('127.0.0.1',args.port),Handler)
     print(f'CH_READY {server.server_port}',flush=True)
     def terminate(*_):
         raise KeyboardInterrupt

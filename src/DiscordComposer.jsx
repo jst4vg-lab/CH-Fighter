@@ -1,10 +1,11 @@
+import {apiFetch} from './api.js';
 import React,{useEffect,useRef,useState} from 'react';
 import {Check,GripVertical,Plus,Send,X} from 'lucide-react';
 import DiscordMentionText,{mentionName,TEAM_COLORS} from './DiscordMentionText.jsx';
 import {mentionQuery,shiftSelections} from './mentionDraft.js';
 
 async function api(path,body){
- const response=await fetch('/api'+path,body===undefined?undefined:{
+ const response=await apiFetch('/api'+path,body===undefined?undefined:{
   method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)
  });
  const value=await response.json();
@@ -91,7 +92,7 @@ export default function DiscordComposer({snapshot,onChanged,reply,onClearReply,m
    request.current=payload;
    let response;
    try{
-    response=await fetch('/api/communications/composer',{
+    response=await apiFetch('/api/communications/composer',{
      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)
     });
    }catch{
@@ -209,7 +210,7 @@ export default function DiscordComposer({snapshot,onChanged,reply,onClearReply,m
     <button type="button" aria-label="Manual handoff actions" aria-expanded={menu} disabled={locked||!!request.current}
      onClick={()=>setMenu(!menu)}><Plus size={18}/></button>
     {menu&&<div className="composerMenu">
-     <button type="button" disabled={!text} onClick={()=>fallback(()=>navigator.clipboard.writeText(text))}>Copy text</button>
+     <button type="button" disabled={!text} onClick={()=>fallback(()=>window.chDesktop?.copyText?window.chDesktop.copyText(text):navigator.clipboard.writeText(text))}>Copy text</button>
      <button type="button" disabled={!hot||!!hot.missing_count||!window.chDesktop?.copyHotPackage} onClick={()=>fallback(async()=>{
       await saveText();await window.chDesktop.copyHotPackage(hot.id);setCopied(itemKey);
      })}>Copy crea files</button>

@@ -1,3 +1,4 @@
+import {apiFetch} from './api.js';
 import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {createPortal} from 'react-dom';
@@ -14,7 +15,7 @@ import DiscordDestinationSettings from './DiscordDestinationSettings.jsx';
 
 const BRANCHES={af:'Air Corps',ar:'Army',de:'Defense',ex:'Expeditionary Force',hf:'Space',mi:'Missiles',nf:'Naval'};
 const TYPES={afs:'Air Force Support',avi:'Helicopter',fgt:'Fighter',stk:'Strike Aircraft',ada:'Air Defence',art:'Artillery',asu:'Army Support',def:'Defences',fpv:'Drone',inf:'Infantry',mbt:'Tank',mob:'Mobility',frt:'Fortress',aas:'Air Assault',lan:'Orbital Drop',par:'Paratrooper',sct:'Space Combat',ses:'Space Escort',ssu:'Space Support',mis:'Missile',car:'Carrier',cbt:'Combat Ship',esc:'Escort',sub:'Submarine',tsb:'Transport',tsp:'Transport'};
-async function api(path,body){const r=await fetch('/api'+path,{method:body?'POST':'GET',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});const j=await r.json();if(!r.ok)throw Error(j.error||'Request failed');return j}
+async function api(path,body){const r=await apiFetch('/api'+path,{method:body?'POST':'GET',headers:body?{'Content-Type':'application/json'}:{},body:body?JSON.stringify(body):undefined});const j=await r.json();if(!r.ok)throw Error(j.error||'Request failed');return j}
 
 function ColorRow({creator,save,toggle,saving}){
  const [value,setValue]=useState(creator.color||'#6B7754');

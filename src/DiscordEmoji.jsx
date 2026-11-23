@@ -1,9 +1,10 @@
 import React,{useState} from 'react';
+import SecureImage from './SecureImage.jsx';
 
 function CustomEmoji({name,id,animated}){
  const [failed,setFailed]=useState(false);
  if(failed)return <span>:{name}:</span>;
- return <img className="discordEmoji" src={`https://cdn.discordapp.com/emojis/${id}.${animated?'gif':'webp'}?size=32`}
+ return <SecureImage className="discordEmoji" src={`https://cdn.discordapp.com/emojis/${id}.${animated?'gif':'webp'}?size=32`}
   alt={`:${name}:`} title={`:${name}:`} onError={()=>setFailed(true)}/>;
 }
 

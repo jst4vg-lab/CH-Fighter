@@ -1,7 +1,8 @@
+import {apiFetch} from './api.js';
 import React,{useEffect,useState} from 'react';
 import {ArrowUpFromLine,Check,Clipboard,ClipboardCopy,FolderOpen,RotateCcw,Send,Trash2,TriangleAlert,X} from 'lucide-react';
 
-async function post(path,body={}){const r=await fetch('/api'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const v=await r.json();if(!r.ok)throw Error(v.error||'Action failed');return v}
+async function post(path,body={}){const r=await apiFetch('/api'+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});const v=await r.json();if(!r.ok)throw Error(v.error||'Action failed');return v}
 export function HotStage({snapshot,onChanged}){
  const hot=snapshot.hot, reserve=snapshot.reserve||[];
  const [submission,setSubmission]=useState(''),[copied,setCopied]=useState(0),[error,setError]=useState(''),[busy,setBusy]=useState(false),[pendingRemove,setPendingRemove]=useState(null);
@@ -13,7 +14,7 @@ export function HotStage({snapshot,onChanged}){
  useEffect(()=>{if(!hot||submission===hot.submission)return;const timer=setTimeout(()=>post(`/staging/packages/${hot.id}/submission`,{submission}).then(onChanged).catch(e=>setError(e.message)),450);return()=>clearTimeout(timer)},[submission,hot?.id,hot?.submission]);
  async function run(path,body={}){setBusy(true);setError('');try{if(hot&&submission!==hot.submission)await post(`/staging/packages/${hot.id}/submission`,{submission});await post(path,body);setCopied(0);await onChanged()}catch(e){setError(e.message)}finally{setBusy(false)}}
  async function copyAll(){if(!hot||hot.missing_count)return;setBusy(true);setError('');try{if(!window.chDesktop?.copyHotPackage)throw Error('Package clipboard requires the desktop app');if(submission!==hot.submission)await post(`/staging/packages/${hot.id}/submission`,{submission});const result=await window.chDesktop.copyHotPackage(hot.id);setCopied(result.count);setError(`${result.count} crea copied as files. Paste into Discord, then confirm after posting.`)}catch(e){setError(`Clipboard failed: ${e.message}. Use the Dolphin folder instead.`)}finally{setBusy(false)}}
- async function copyText(){try{await navigator.clipboard.writeText(submission);setError('Submission text copied. Paste it into Discord.')}catch(e){setError(e.message)}}
+ async function copyText(){try{await (window.chDesktop?.copyText?window.chDesktop.copyText(submission):navigator.clipboard.writeText(submission));setError('Submission text copied. Paste it into Discord.')}catch(e){setError(e.message)}}
  async function openInFiles(){if(!hot||!window.chDesktop)return;setBusy(true);setError('');try{await window.chDesktop.openPackageInFiles(hot.id);setError('In Files, select the images and drag them into Discord. Confirm here after posting.')}catch(e){setError(e.message)}finally{setBusy(false)}}
  function dragHot(e){if(!hot)return;setPendingRemove(null);e.dataTransfer.setData('application/x-ch-package',hot.id);e.dataTransfer.effectAllowed='move'}
  function dropHot(e){e.preventDefault();const pid=e.dataTransfer.getData('application/x-ch-package');if(reserve.some(p=>p.id===pid))run(`/staging/reserve/${pid}/activate`)}
@@ -29,7 +30,7 @@ export function ReserveStage({snapshot,onChanged,used,usedOpen,onCloseUsed}){
  const [transfer,setTransfer]=useState(null);
  async function exportUsed(){
   try{
-   const response=await fetch('/api/used/export');
+   const response=await apiFetch('/api/used/export');
    if(!response.ok)throw Error('Unable to export Used Crea');
    const url=URL.createObjectURL(await response.blob());
    const link=document.createElement('a');

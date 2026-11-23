@@ -227,3 +227,7 @@
 .galleryOrderList li span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .galleryOrderList button { display: inline-flex; padding: 4px; }
 .orderGrip { cursor: grab; }
+.secureImageTile { min-width:0; aspect-ratio:1; overflow:hidden; border-radius:5px; cursor:pointer; }
+.secureImageTile > img { width:100%; height:100%; object-fit:cover; }
+.secureImageTile .mediaConsent { width:100%; height:100%; aspect-ratio:auto; font-size:11px; padding:4px; }
+.mediaUnavailable { color:#aeb5a5; font-size:11px; }

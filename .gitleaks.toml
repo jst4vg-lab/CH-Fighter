@@ -1,0 +1,8 @@
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Generated dependencies and local runtime data are scanned at the release gate"
+paths = [
+  '''(^|/)(node_modules|\.venv[^/]*|\.git|data|Crea|build|dist|__pycache__)/'''
+]

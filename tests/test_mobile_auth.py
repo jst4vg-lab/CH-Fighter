@@ -21,10 +21,13 @@ class MobileAuthTests(unittest.TestCase):
         mobile_auth.setup()
         self.host_patch = patch.object(server, 'REMOTE_HOST', 'framework.tail.ts.net')
         self.host_patch.start()
+        self.attempt_patch = patch.object(mobile_auth, '_attempt_times', __import__('collections').deque())
+        self.attempt_patch.start()
         self.secret_patch = patch.object(server, 'DESKTOP_SECRET', 'desktop-only-secret')
         self.secret_patch.start()
 
     def tearDown(self):
+        self.attempt_patch.stop()
         self.host_patch.stop()
         self.secret_patch.stop()
         self.db_patch.stop()
@@ -64,7 +67,8 @@ class MobileAuthTests(unittest.TestCase):
         handler.headers['Origin'] = 'https://another.example'
         self.assertFalse(handler.allowed('POST', '/api/staging/hot/items'))
         self.assertFalse(handler.allowed('POST', '/api/staging/hot/confirm'))
-        handler.headers = {'Host': 'localhost'}
+        handler.server = __import__('types').SimpleNamespace(server_port=8765)
+        handler.headers = {'Host': 'localhost:8765'}
         self.assertFalse(handler.allowed('GET', '/api/mobile/pair-code'))
         handler.headers['X-CH-Desktop'] = 'desktop-only-secret'
         self.assertTrue(handler.allowed('GET', '/api/mobile/pair-code'))
