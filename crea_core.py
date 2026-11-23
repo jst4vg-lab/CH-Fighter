@@ -48,10 +48,22 @@ def db():
     create table if not exists deployments(id text primary key,created_at text not null default current_timestamp,before_json text not null,after_json text not null,undone integer not null default 0);
     create table if not exists workspace_drafts(id text primary key, text text not null default '', asset_ids_json text not null default '[]', status text not null default 'draft' check(status in ('draft','prepared','handoff_pending','sent_confirmed','failed_unverified')), channel_url text not null default '', active integer not null default 1, created_at text not null default current_timestamp, updated_at text not null default current_timestamp);
     create table if not exists app_settings(key text primary key,value text not null);
+    create table if not exists discord_teams(
+      guild_id text not null, user_id text not null, name text not null,
+      team text not null check(team in ('blue','red','yellow')), primary key(guild_id,user_id));
     create table if not exists member_colors(user_id text primary key,color text not null);
+    create table if not exists composer_sends(
+      id text primary key, package_id text, asset_ids text not null, test_mode integer not null,
+      guild_id text, channel_id text not null, sender_id text not null, message_id text,
+      status text not null, error text);
+    create unique index if not exists composer_send_in_flight on composer_sends((1))
+      where status in ('pending','unverified');
     create table if not exists workspace_test_sends(draft_id text primary key references workspace_drafts(id),channel_id text not null,status text not null,message_id text,sender_id text,error text,updated_at text not null default current_timestamp);
     create unique index if not exists one_active_workspace_draft on workspace_drafts(active) where active=1;
     ''')
+    if 'mentions_json' not in {row['name'] for row in con.execute('pragma table_info(packages)')}:
+        con.execute("alter table packages add column mentions_json text not null default '[]'")
+        con.commit()
     if 'used' not in {r['name'] for r in con.execute('pragma table_info(assets)')}:
         con.execute('alter table assets add column used integer not null default 0')
         con.commit()

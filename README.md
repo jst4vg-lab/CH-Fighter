@@ -6,7 +6,7 @@ Backend Discord code is separated by direction: `communications/incoming/` conta
 
 The desktop Communications pane now defaults to a read-only custom feed. Copy `.env.example` to `.env` for development, or place `.env` in the installed app data directory, set the authorized read bot token and configured guild/channel IDs, install updated Python requirements, then launch `npm run desktop`. The backend reads `.env` locally; tokens are never sent to the browser. The read provider requires Discord's message-content intent and permission to view the guild channels and read history. If unavailable, the pane reports the reason; **Discord web** remains a manual fallback. Sending through the custom feed is unavailable by default. Existing manual clipboard and Dolphin handoff still operate in Crea Manager.
 
-For controlled test sends, set `DISCORD_WRITE_PROVIDER=discord_bot`, `DISCORD_WRITE_BOT_TOKEN`, and `DISCORD_WRITE_TEST_CHANNEL_ID` in the backend `.env`. The bot must have View Channel, Send Messages, and Attach Files in that test channel. The **Send to test channel** control shows the bot and channel IDs before sending. Save the draft first; text, ordered formatted crea, and an optional reply message ID are sent only when you click that control. A confirmed send stores Discord's message and sender IDs. Test sends do not mark crea Used or alter Reserve. A timeout is recorded as unverified and cannot be retried automatically; inspect Discord before starting another draft. Leave `DISCORD_WRITE_PROVIDER=disabled` for normal read-only operation. Never put a personal-account token in this configuration.
+For controlled test sends, set `DISCORD_WRITE_PROVIDER=discord_bot`, `DISCORD_WRITE_BOT_TOKEN`, and `DISCORD_WRITE_TEST_CHANNEL_ID` in the backend `.env`. The bot must have View Channel, Send Messages, and Attach Files in that test channel. The **Send to test channel** control shows the bot and channel IDs before sending. Save the draft first; text, ordered formatted crea, and an optional reply message ID are sent only when you click that control. A confirmed send stores Discord's message and sender IDs. Test sends do not mark crea Used or alter Reserve. A timeout is recorded as unverified and cannot be retried automatically; inspect Discord before starting another draft. Leave `DISCORD_WRITE_PROVIDER=disabled` for normal read-only operation.
 
 Settings → Crea Library lets the host choose one active source directory, apply it, and rescan. The existing source preference is migrated on first launch. A disconnected source remains saved and indexed records are retained. The mobile companion continues to access thumbnails through the host. The settings page displays the absolute source path; it does not place that path on the phone.
 
@@ -81,8 +81,54 @@ The package clipboard helper requires the host Python 3 installation to provide 
 
 ### Discord connection profiles
 
-Copy `communications-profiles.example.toml` to `$CH_DATA_DIR/communications-profiles.toml` (development defaults to `data/`, desktop uses its application data directory). Set the referenced bot credentials in the backend `.env` and set the guild IDs in TOML. A profile selected for outgoing delivery needs an authorized test channel as its `channel_id`.
+Copy `communications-profiles.example.toml` to `$CH_DATA_DIR/communications-profiles.toml` (development defaults to `data/`, desktop uses its application data directory). Set the referenced credentials in the backend `.env` and set the guild IDs in TOML. Set `channel_id` for an initial destination, or choose a channel in Settings.
 
-Open **Settings → Discord Connections** to choose either direction and apply the selections. Choices persist and override the initial `DISCORD_ACTIVE_READ_PROFILE` and `DISCORD_ACTIVE_WRITE_PROFILE` values. Existing installations use synthesized legacy profiles by default. Restart to discover newly added profiles when no profile is active. Reconnect reloads the TOML and backend `.env` for the selected profile. Changes to inherited process variables require a restart.
+Open **Settings → Discord Connections** and apply a profile. A profile with outgoing enabled shares its connection for reading and sending. Choices persist and override the initial `DISCORD_ACTIVE_READ_PROFILE` and `DISCORD_ACTIVE_WRITE_PROFILE` values. Existing installations use synthesized legacy profiles by default. Restart to discover newly added profiles when no profile is active. Reconnect reloads the TOML and backend `.env` for the selected profile. Changes to inherited process variables require a restart.
 
-The manager shares one client for matching profile IDs. Authentication takes place on its worker loop. The read feed requests Message Content intent, which must also be enabled for the bot in Discord. The composer checks channel access, send and attachment permissions before dispatch. Test sends remain confined to the configured test channel and preserve Crea usage state.
+The manager shares one client for matching profile IDs. Authentication takes place on its worker loop. The read feed requests Message Content intent, which must also be enabled for the bot in Discord. The composer checks channel access, send and attachment permissions before dispatch. Test mode preserves Crea usage state. The legacy test-send endpoint uses the configured test channel.
+
+
+### Experimental Discord user profile
+
+The example configuration offers **Disabled**, **Bot**, and **User** as shared profiles. **Bot** uses `DISCORD_READ_BOT_TOKEN` for both directions. Leave the legacy provider settings disabled when using these named profiles. **User** uses an isolated `discord.py-self` worker. Set
+`DISCORD_USER_TOKEN` in the backend `.env` and select a destination in Settings. This profile uses the same composer and quick reaction controls, subject to the account’s permissions. Discord prohibits automating user accounts outside its supported bot and OAuth2 APIs. Use the bot profile for a public deployment.
+
+Create the worker environment with:
+
+```sh
+python3 -m venv "$CH_DATA_DIR/discord-self-venv"
+"$CH_DATA_DIR/discord-self-venv/bin/python" -m pip install -r requirements-discord-self.txt
+```
+
+Set `CH_DATA_DIR` in these commands to the running backend's data directory.
+For KDE desktop builds, the backend data directory is typically
+`~/.local/share/clan-hub-crea-manager` (or under `$XDG_DATA_HOME`).
+Set `DISCORD_USER_TOKEN` in the `.env` in that directory when launching a packaged
+build. For a source launch, an entry in the desktop data directory's `.env`
+overrides the project-root `.env`, even when the desktop entry is blank.
+For an installed RPM, use the requirements file in the app's
+`resources/discord-worker/` directory. The usual app environment uses
+`discord.py` exclusively. If either environment contains both libraries,
+recreate it using the appropriate requirements file. Select the user profile
+in Discord Connections and use Reconnect after changing local credentials.
+Test history and live updates from both accounts. For outgoing verification,
+use a saved draft with a fixture image and a reply in the configured test
+channel, then verify the recorded sender and message IDs in Discord.
+
+In the desktop **Used Crea** view, **Export Used** saves a portable JSON list. **Import Used** adds matching entries to your current Used list and reports missing or ambiguous entries. A moved file can match by its original content. Existing Used entries remain in place.
+
+**Settings → Discord Connections → Test mode** is on by default. A confirmed test send clears the composer and preserves Reserve and Used Crea. Turn it off to let a confirmed send mark the matching package Used. The configured Discord destination stays the same. Staging changes are blocked while an attached send is pending or unverified.
+
+The desktop Discord composer uses gallery selections as attachments immediately. Type and press Enter to send or Shift+Enter for a new line. Drag the grip beside the text field to Reserve to move the selected crea and text together. The **+** menu opens manual clipboard and Files actions. Confirmed test sends clear the composer while leaving assets available. Confirmed deployment sends apply the Used Crea and Reserve rules. If Discord delivery is uncertain, check the destination before resolving the send in the composer.
+
+The Discord feed groups consecutive messages from one author and uses their Discord role color for the group’s left edge. Click **Reply** or double-click a message to target it in the composer. Click an image thumbnail for the uncropped original, with **Fit** and **100%** zoom.
+
+In **Settings → Discord Connections → Quick reactions**, set five emoji for the feed’s **React** menu. Paste a Unicode emoji or a Discord custom emoji reference into each slot. Sending and quick reactions use the displayed channel using the active profile and its Discord permissions. The destination picker includes visible active threads. Test mode controls local Crea changes. Click an inline reply to jump to its original message. The feed loads any intervening history in the background, and **Back to latest** returns to the live end.
+
+**Settings → Discord Connections → Feed destination** lists all servers the connected profile belongs to, with the visible text channels for each. A bot profile can omit its initial guild and channel IDs and pick them here. Applying a destination saves it for that profile and also targets the outgoing profile there, subject to its channel permissions.
+
+The Discord **Teams** board starts with participants from loaded messages. Drag cards to Unassigned, Alpha (red), Bravo (blue), or Charlie (yellow). Assignments are stored locally per server. Click one or more cards to focus their messages and dim other authors. Click **Clear focus** to restore the full feed. Alt+Left and Alt+Right move the focused member card between lanes. Click outside an opened image or press Escape to close it.
+
+Link previews show images supplied by Discord. Forwarded posts show the full available snapshot, including its text, attachments, embeds, and original timestamp. Discord leaves the original author out of snapshots.
+
+**Team colors** switches member names, message lines, and mentions from Discord role colors to team colors. Type `@` in the composer and select a member or role to mention them. **Settings → Gallery order** saves branch tabs and per-branch type sections for desktop and mobile.

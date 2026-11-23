@@ -5,3 +5,225 @@
 .suiteTestSend{display:flex;flex-direction:column;gap:5px;padding:7px;background:#263024;border:1px solid #56644B;border-radius:5px;font-size:12px}.suiteTestSend small{color:#C6C4B4;overflow-wrap:anywhere}.suiteTestSend a{color:#B0C6A5}.suiteTestSend input{flex:1;min-width:150px;padding:5px;color:#F0EEE5;background:#171B16;border:1px solid #56644B;border-radius:5px}.suiteTestAssets{display:flex;gap:6px;overflow-x:auto}.suiteTestAssets>div{display:flex;align-items:center;gap:2px}.suiteTestAssets img{width:38px;height:38px;object-fit:cover}.suiteTestAssets button{padding:3px 5px}
 .suiteCrea .overlay{position:absolute;z-index:20}.suiteCrea .stageOverlay{left:0;right:auto;width:var(--crea-width)}
 @media(max-width:900px){.suiteCrea .stageOverlay{width:100vw}}
+
+.commFeed { overflow-anchor: none; }
+
+.suiteCommunications {
+  background: #222a20;
+}
+.suiteCommHeader {
+  justify-content: flex-start;
+  gap: 8px;
+  letter-spacing: normal;
+}
+.suiteCommHeader strong {
+  flex: 1;
+  font-size: 18px;
+}
+.commFeed {
+  min-height: 0;
+}
+.suiteComposer {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 48%;
+  overflow: auto;
+  margin: 8px 12px 12px;
+  padding: 8px;
+  border-radius: 8px;
+  background: #2d372b;
+}
+.suiteHotDock .hotStage {
+  position: static;
+  margin: 0;
+  background: transparent;
+}
+.suiteHotDock .hotStageRow {
+  flex-wrap: wrap;
+}
+.suiteHotDock .hotControls {
+  flex: 1 1 220px;
+}
+.suiteSendDetails summary {
+  cursor: pointer;
+  padding: 5px 8px;
+  color: #f0eee5;
+}
+.suiteSendDetails .suiteDraft {
+  max-height: none;
+  border-bottom: 0;
+}
+
+.discordComposer { display: grid; gap: 8px; }
+.composerMeta { display: flex; justify-content: space-between; gap: 8px; color: #aeb5a5; font-size: 12px; }
+.composerEntry { display: flex; align-items: center; gap: 7px; }
+.composerEntry textarea { flex: 1; min-width: 0; min-height: 52px; max-height: 140px; resize: vertical; padding: 8px; border: 1px solid #4a594b; border-radius: 5px; background: #222a20; color: inherit; font: inherit; }
+.composerEntry button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+.composerEntry .composerSend { background: #a48a69; color: #171b16; }
+.composerEntry .composerSend:disabled { opacity: .5; }
+.composerDrag[draggable="true"] { cursor: grab; }
+.composerAttachments { display: flex; gap: 6px; overflow-x: auto; }
+.composerAttachment { position: relative; flex: none; }
+.composerAttachment img { width: 58px; height: 58px; object-fit: cover; border-radius: 4px; }
+.composerAttachment button { position: absolute; top: 2px; right: 2px; padding: 2px; }
+.composerAttachment small { position: absolute; bottom: 2px; left: 2px; background: #222a20; }
+.composerActions { position: relative; }
+.composerMenu { display: grid; gap: 3px; padding: 4px; }
+.composerMenu button { white-space: nowrap; }
+
+.commFeed { --discord-name-default: #f0eee5; }
+.commMessageGroup {
+  border-inline-start: 2px solid var(--author-color);
+  padding: 6px 10px 8px;
+  margin: 0 0 10px;
+  min-width: 0;
+}
+.commMessageGroup.focused { background: #384131; }
+.commMessageAuthor { display: flex; align-items: center; gap: 8px; color: var(--author-color); margin-bottom: 4px; }
+.commMessageAuthor img { width: 30px; height: 30px; object-fit: cover; border-radius: 50%; }
+.commFeed .commMessage { display: block; padding: 3px 0; border: 0; overflow-wrap: anywhere; }
+.commReplyContext { display: block; margin: 2px 0; }
+.commMessageActions { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin: 3px 0; }
+.commMessageActions button { display: inline-flex; gap: 3px; align-items: center; padding: 2px 5px; font-size: 11px; }
+.commImageGrid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 5px; max-width: 480px; }
+.commImageGrid button { min-width: 0; aspect-ratio: 1; padding: 0; overflow: hidden; border: 0; border-radius: 5px; }
+.commImageGrid img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.discordImageViewer { width: min(92vw,1100px); max-height: 92dvh; padding: 0; color: #f0eee5; background: #222a20; border: 1px solid #4a594b; border-radius: 8px; }
+.discordImageViewer::backdrop { background: #000b; }
+.discordImageToolbar { display: flex; gap: 6px; align-items: center; padding: 8px; }
+.discordImageToolbar strong { flex: 1; overflow-wrap: anywhere; }
+.discordImageCanvas { overflow: auto; max-height: 78dvh; background: #171b16; }
+.discordImageCanvas img { display: block; margin: auto; max-width: 100%; max-height: 78dvh; object-fit: contain; }
+.discordImageCanvas.actual img { max-width: none; max-height: none; }
+.composerReply { display:flex; justify-content:space-between; align-items:center; gap:8px; font-size:12px; }
+
+.commMessageGroup {
+  position: relative;
+  padding: 0 0 0 34px;
+  margin-bottom: 8px;
+}
+.commGroupAvatar { position: absolute; inset: 4px auto auto 5px; }
+.commAvatar {
+  display: inline-grid;
+  place-items: center;
+  width: 23px;
+  height: 23px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  object-fit: cover;
+}
+.commAvatarPlaceholder { background: #4a594b; color: #f0eee5; font: 11px sans-serif; }
+.commFeed .commMessage {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0,1fr) max-content;
+  align-items: start;
+  gap: 6px;
+  padding: 3px 6px 3px 3px;
+  border-radius: 3px;
+}
+.commFeed .commMessage:hover { background: #303b2d; }
+.commFeed .commMessage.commJumpHighlight { background: #48563d; }
+.commMessageAuthor { display: block; font-size: 13px; line-height: 17px; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.commFeed .commMessage p { margin: 1px 0 3px; }
+.commFeed .commTimestamp { font-size: 10px; color: #aeb5a5; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.commMessageActions {
+  position: absolute;
+  z-index: 2;
+  right: 62px;
+  top: 0;
+  margin: 0;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 4px;
+  background: #222a20;
+  border: 1px solid #4a594b;
+  opacity: 0;
+  pointer-events: none;
+}
+.commMessage:hover .commMessageActions,
+.commMessage:has(:focus-visible) .commMessageActions,
+.commMessageActions.open { opacity: 1; pointer-events: auto; }
+.commMessage:has(.commMessageActions.open) { z-index: 3; }
+.commMessageActions button[aria-disabled=true] { opacity: .55; }
+@media (hover: none) {
+  .commMessageActions { position: relative; right: auto; top: auto; grid-column: 1 / -1; justify-self: end; opacity: 1; pointer-events: auto; }
+}
+.commFeed .commReplyContext {
+  display: flex; align-items: center; gap: 4px; max-width: 100%; padding: 0; margin: 0 0 2px;
+  border: 0; border-radius: 0; background: transparent; color: #aeb5a5; font-size: 11px; text-align: start;
+}
+.commReplyContext .commAvatar { width: 14px; height: 14px; }
+.commReplyContext svg, .commReplyContext strong { flex: 0 0 auto; }
+.commReplyContext strong { max-width: 35%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.commReplyContext span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.commFeed .commReplyContext:hover { color: #f0eee5; text-decoration: underline; }
+.commHistoryGap { padding: 7px; border-block: 1px dashed #657260; color: #aeb5a5; text-align: center; font-size: 11px; }
+.commLatest { align-self: center; padding: 3px 9px; font-size: 11px; }
+.discordEmoji { display: inline-block; width: 1.25em; height: 1.25em; object-fit: contain; vertical-align: -.23em; }
+.commReactionPicker { position: absolute; inset: 100% 0 auto auto; display: flex; gap: 3px; padding: 4px; border: 1px solid #4a594b; border-radius: 5px; background: #222a20; }
+.commReactionPicker button { padding: 4px; font-size: 16px; }
+.commReactionCounts { display: flex; flex-wrap: wrap; gap: 4px; }
+.commReactionCounts small { padding: 1px 5px; background: #384131; border-radius: 6px; }
+.quickReactionSlots { display: grid; gap: 4px; margin: 6px 0; }
+.quickReactionSlots label { display: flex; align-items: center; gap: 8px; }
+.quickReactionSlots input { width: min(65%, 260px); }
+.quickReactionPreview { font-size: 16px; }
+
+.commDimmed { filter: grayscale(1); opacity: .52; }
+.commDimmed:has(.commJumpHighlight) { opacity: .9; }
+.teamBoard { flex: none; padding: 4px 10px 6px; }
+.teamBoardHeader { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+.teamBoardHeader button { font-size: 11px; padding: 3px 6px; }
+.teamBoardToggle { display: inline-flex; align-items: center; gap: 4px; }
+.teamBoardHeader small { color: #aeb5a5; }
+.teamBoardLanes { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 5px; }
+.teamLane {
+  min-width: 0;
+  padding: 4px;
+  background: #2d372b;
+  border: 1px solid #465243;
+  border-top: 2px solid var(--team-color,#899486);
+  border-radius: 5px;
+}
+.teamLane-blue { --team-color: #7199bd; }
+.teamLane-red { --team-color: #c47670; }
+.teamLane-yellow { --team-color: #d3ba76; }
+.teamLane.dropTarget { background: #40503a; outline: 1px solid var(--team-color,#899486); }
+.teamLane h4 { font-size: 11px; font-weight: 600; margin: 0 0 4px; }
+.teamLane h4 span { color: #aeb5a5; }
+.teamMembers { min-height: 23px; max-height: 74px; overflow: auto; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 3px; }
+.teamMembers button { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: grab; font-size: 11px; padding: 2px 5px; }
+.teamMembers button[aria-pressed=true] { border-color: var(--team-color,#a3b679); background: #43523b; }
+.teamMembers button.dimMember { color: #a6a9a1; filter: grayscale(1); }
+.teamMoveFallback { font-size: 11px; margin-top: 4px; }
+.teamMoveFallback summary { cursor: pointer; color: #aeb5a5; }
+.teamMoveFallback select, .teamMoveFallback button { font-size: 11px; margin: 3px; }
+.discordDestinationFields { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.discordDestinationFields select { max-width: min(45vw, 260px); }
+@media(max-width:500px) { .teamBoardLanes { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+
+.commForwarded { margin: 5px 0; padding: 5px 8px; border-inline-start: 2px solid #657260; background: #273025; }
+.commForwardLabel { display: flex; align-items: center; gap: 4px; color: #aeb5a5; font-size: 11px; }
+.commForwardSnapshot { margin-top: 3px; }
+.commForwardSnapshot + .commForwardSnapshot { border-top: 1px solid #465243; padding-top: 5px; }
+
+.discordComposer { gap: 5px; }
+.suiteComposer { margin-top: 4px; padding: 5px; }
+.composerEntry { position: relative; gap: 4px; }
+.composerEntry textarea { min-height: 32px; max-height: 110px; padding: 5px 7px; }
+.composerEntry > button, .composerActions > button { padding: 5px; }
+.composerTestBadge, .composerUnavailable { color: #aeb5a5; font-size: 10px; }
+.composerAttachment img { width: 48px; height: 48px; }
+.composerMentionPicker { position: absolute; bottom: calc(100% + 4px); left: 0; right: 0; display: grid; max-height: 150px; overflow: auto; border: 1px solid #51604d; border-radius: 5px; background: #222a20; padding: 4px; }
+.composerMentionPicker button { justify-content: space-between; color: #f0eee5; font-size: 12px; border: none; padding: 4px 7px; }
+.composerMentionPicker button[aria-selected=true] { background: #40503a; }
+.composerMentionPicker small { color: #aeb5a5; }
+.discordMention { display:inline; color:var(--mention-color); background:color-mix(in srgb,var(--mention-color) 16%,transparent); padding:0 3px; border-radius:3px; white-space:nowrap; }
+.suiteComposer { overflow: visible; }
+.galleryOrderColumns { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 10px; }
+.galleryOrderList { padding: 0; list-style: none; max-height: 220px; overflow-y: auto; }
+.galleryOrderList li { display: flex; align-items: center; gap: 5px; padding: 2px 0; }
+.galleryOrderList li span { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.galleryOrderList button { display: inline-flex; padding: 4px; }
+.orderGrip { cursor: grab; }

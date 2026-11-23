@@ -11,7 +11,7 @@ class ConnectionProfile:
     name: str
     provider: str
     token_env: str
-    guild_id: str
+    guild_id: str = ''
     channel_id: str = ''
     read_enabled: bool = True
     write_enabled: bool = False
@@ -44,11 +44,12 @@ def load_profiles(path: Path, settings: dict):
             for field in ('name', 'provider', 'token_env', 'guild_id', 'channel_id', 'description'):
                 if not isinstance(getattr(profile, field), str):
                     raise ValueError(f'Invalid field type in profile {profile_id}')
-            if not profile.name.strip() or profile.provider != 'discord_bot':
+            if not profile.name.strip() or profile.provider not in ('discord_bot', 'discord_user'):
                 raise ValueError(f'Invalid name or unsupported provider in profile {profile_id}')
             if not re.fullmatch(r'[A-Z_][A-Z0-9_]*', profile.token_env):
                 raise ValueError(f'Invalid credential environment reference in profile {profile_id}')
-            if not re.fullmatch(r'\d{1,24}', profile.guild_id) or (profile.channel_id and not re.fullmatch(r'\d{1,24}', profile.channel_id)):
+            if ((profile.guild_id and not re.fullmatch(r'[0-9]{1,24}', profile.guild_id))
+                    or (profile.channel_id and (not profile.guild_id or not re.fullmatch(r'[0-9]{1,24}', profile.channel_id)))):
                 raise ValueError(f'Invalid guild or channel ID in profile {profile_id}')
             if type(profile.read_enabled) is not bool or type(profile.write_enabled) is not bool:
                 raise ValueError(f'Invalid direction flags in profile {profile_id}')

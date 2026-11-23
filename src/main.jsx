@@ -1,10 +1,16 @@
 import React, {useEffect, useMemo, useRef, useState} from 'react';
 import {createRoot} from 'react-dom/client';
+import {createPortal} from 'react-dom';
 import {Search, RefreshCw, ChevronDown, ChevronRight, SlidersHorizontal, AlertTriangle, Archive, Menu, Minus, Plus, ArrowLeft, Info} from 'lucide-react';
-import {HotStage,ReserveStage} from './Staging.jsx';
+import {ReserveStage} from './Staging.jsx';
 import './style.css';
 import Mobile from './Mobile.jsx';
 import WorkspaceShell from './WorkspaceShell.jsx';
+import DiscordComposer from './DiscordComposer.jsx';
+import GalleryOrderSettings from './GalleryOrderSettings.jsx';
+import {orderedCodes} from './galleryOrder.js';
+import QuickReactionsSettings from './QuickReactionsSettings.jsx';
+import DiscordDestinationSettings from './DiscordDestinationSettings.jsx';
 
 const BRANCHES={af:'Air Corps',ar:'Army',de:'Defense',ex:'Expeditionary Force',hf:'Space',mi:'Missiles',nf:'Naval'};
 const TYPES={afs:'Air Force Support',avi:'Helicopter',fgt:'Fighter',stk:'Strike Aircraft',ada:'Air Defence',art:'Artillery',asu:'Army Support',def:'Defences',fpv:'Drone',inf:'Infantry',mbt:'Tank',mob:'Mobility',frt:'Fortress',aas:'Air Assault',lan:'Orbital Drop',par:'Paratrooper',sct:'Space Combat',ses:'Space Escort',ssu:'Space Support',mis:'Missile',car:'Carrier',cbt:'Combat Ship',esc:'Escort',sub:'Submarine',tsb:'Transport',tsp:'Transport'};
@@ -25,6 +31,14 @@ function MobileSettings(){
 }
 function DiscordConnections(){
  const [info,setInfo]=useState(null),[selection,setSelection]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const [testMode,setTestMode]=useState(null);
+ useEffect(()=>{api('/communications/test-mode').then(value=>setTestMode(value.enabled)).catch(e=>setError(e.message))},[]);
+ async function changeTestMode(enabled){
+  setBusy(true);setError('');
+  try{setTestMode((await api('/communications/test-mode',{enabled})).enabled)}
+  catch(e){setError(e.message)}
+  finally{setBusy(false)}
+ }
  const endpoint='/communications/profiles';
  useEffect(()=>{
   let active=true;
@@ -42,42 +56,38 @@ function DiscordConnections(){
   catch(e){setError(e.message)}
   finally{setBusy(false)}
  }
- const selected=selection||info?.active;
+ const selected=selection??info?.active.read??'';
  return <section className="settingsCard"><h2>Discord Connections</h2>
- {info&&['read','write'].map(direction=>{
-  const state=info[direction],id=info.active[direction];
-  const profile=info.profiles.find(profile=>profile.id===id);
-  const capabilities=state.delivery?.capabilities||state.feed?.capabilities||{};
-  return <div className="discordConnectionRow" key={direction}>
-   <label>{direction==='read'?'Incoming':'Outgoing'} <select value={selected[direction]} disabled={busy}
-    onChange={e=>setSelection({...selected,[direction]:e.target.value})}>
-    <option value="">Disabled</option>
-    {selected[direction]&&!info.profiles.some(p=>p.id===selected[direction]&&p[direction+'_enabled'])&&
-     <option value={selected[direction]}>Unavailable profile</option>}
-    {info.profiles.filter(p=>p[direction+'_enabled']).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
-   </select></label>
-   <button disabled={busy||!id} onClick={()=>update('/reconnect',{profile_id:id})}>Reconnect</button>
-   <p>{[state.state?.replaceAll('_',' '),state.account?.name,state.reason||state.delivery?.reason||state.feed?.reason].filter(Boolean).join(' · ')}</p>
-   {profile&&<small>Guild {profile.guild_id||'unconfigured'} · Credential <code>{profile.token_env}</code></small>}
-   {state.feed?.channels?.length>0&&<p>{state.feed.channels.map(c=>'#'+c.name).join(', ')}</p>}
-   {state.delivery?.channel_id&&<p>Test channel {state.delivery.channel_id}</p>}
-   {Object.entries(capabilities).some(([,enabled])=>enabled)&&
-    <p>Available: {Object.entries(capabilities).filter(([,enabled])=>enabled).map(([name])=>name).join(', ')}</p>}
-  </div>
- })}
- <button disabled={busy||!selection} onClick={()=>update('/select',selection)}>Apply profiles</button>
+ <label><input type="checkbox" checked={testMode===true} disabled={busy||testMode===null}
+  onChange={e=>changeTestMode(e.target.checked)}/> Test mode</label>
+ {info&&<div className="discordConnectionRow">
+  <label>Discord profile <select value={selected} disabled={busy} onChange={e=>setSelection(e.target.value)}>
+   <option value="">Disabled</option>
+   {selected&&!info.profiles.some(profile=>profile.id===selected&&profile.read_enabled)&&
+    <option value={selected}>Unavailable profile</option>}
+   {info.profiles.filter(profile=>profile.read_enabled).map(profile=>
+    <option key={profile.id} value={profile.id}>{profile.name}{profile.write_enabled?'':' (read only)'}</option>)}
+  </select></label>
+  <button disabled={busy||selection===null&&info.active.read===info.active.write}
+   onClick={()=>update('/shared',{profile_id:selected})}>Apply profile</button>
+  <button disabled={busy||!info.active.read} onClick={()=>update('/reconnect',{profile_id:info.active.read})}>Reconnect</button>
+  <p>{[info.read.state?.replaceAll('_',' '),info.read.account?.name,info.read.reason].filter(Boolean).join(' · ')}</p>
+  {info.write?.delivery?.channel_name&&<p>Outgoing channel: #{info.write.delivery.channel_name}</p>}
+  {info.write?.delivery?.reason&&info.active.write&&<p>{info.write.delivery.reason}</p>}
+ </div>}
  {(error||info?.error)&&<p role="alert">{error||info.error}</p>}
- </section>
+ <DiscordDestinationSettings api={api} profileId={info?.active.read}/>
+ <QuickReactionsSettings api={api}/></section>
 }
 
 function LibrarySettings({onChanged}){
  const [info,setInfo]=useState(null),[path,setPath]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false);
  useEffect(()=>{api('/library').then(v=>{setInfo(v);setPath(v.path)}).catch(e=>setMessage(e.message))},[]);
  async function run(endpoint,body){setBusy(true);setMessage('');try{const v=await api(endpoint,body);setInfo(v);setPath(v.path);if(endpoint==='/library/rescan')onChanged();setMessage(endpoint==='/library/rescan'?`${v.scanned} files scanned`:'Library location saved')}catch(e){setMessage(e.message)}finally{setBusy(false)}}
- return <section className="settingsCard librarySettings"><div className="settingsTitle"><h2>Crea Library</h2><p>One active source directory on this computer. Originals are never moved.</p></div><div className="librarySettingsBody"><label htmlFor="libraryPath">Library Location</label><div className="libraryPathRow"><input id="libraryPath" value={path} onChange={e=>setPath(e.target.value)} spellCheck="false"/><button disabled={!window.chDesktop?.chooseCreaLibrary||busy} onClick={async()=>{const selected=await window.chDesktop.chooseCreaLibrary();if(selected)setPath(selected)}}>Browse</button><button disabled={busy||!path} onClick={()=>run('/library/apply',{path})}>Apply</button></div><div className="libraryStatus"><span>{info?.available?'Available':'Library Unavailable'}</span><span>{info?.indexed_count??0} indexed assets</span><button disabled={busy} onClick={()=>run('/library/rescan',{})}>Rescan Library</button></div>{message&&<p role="status">{message}</p>}</div></section>
+ return <section className="settingsCard librarySettings"><div className="settingsTitle"><h2>Crea Library</h2></div><div className="librarySettingsBody"><label htmlFor="libraryPath">Library Location</label><div className="libraryPathRow"><input id="libraryPath" value={path} onChange={e=>setPath(e.target.value)} spellCheck="false"/><button disabled={!window.chDesktop?.chooseCreaLibrary||busy} onClick={async()=>{const selected=await window.chDesktop.chooseCreaLibrary();if(selected)setPath(selected)}}>Browse</button><button disabled={busy||!path} onClick={()=>run('/library/apply',{path})}>Apply</button></div><div className="libraryStatus"><span>{info?.available?'Available':'Library Unavailable'}</span><span>{info?.indexed_count??0} indexed assets</span><button disabled={busy} onClick={()=>run('/library/rescan',{})}>Rescan Library</button></div>{message&&<p role="status">{message}</p>}</div></section>
 }
 
-function App(){
+function App({hotDock,reply,onClearReply,mentionMembers,teams,teamColors}){
  const [state,setState]=useState({creators:[],counts:{},busy:false}),[assets,setAssets]=useState([]),[review,setReview]=useState([]),[stage,setStage]=useState({hot:null,reserve:[],used_count:0}),[used,setUsed]=useState([]);
  const [branch,setBranch]=useState('af'),[query,setQuery]=useState(''),[creator,setCreator]=useState('all'),[selected,setSelected]=useState(null),[collapsed,setCollapsed]=useState({});
  const [error,setError]=useState(''),[saving,setSaving]=useState(false),[route,setRoute]=useState(location.pathname==='/settings'?'settings':'gallery');
@@ -100,18 +110,18 @@ function App(){
  const shown=useMemo(()=>assets.filter(a=>a.branch===branch&&(creator==='all'||a.creator===creator)&&(!query||`${a.relpath} ${TYPES[a.type]} ${a.bp??''}`.toLowerCase().includes(query.toLowerCase()))),[assets,branch,creator,query]);
  const hotFull=(stage.hot?.items.length||0)>=10;
  const groups=shown.reduce((acc,a)=>{(acc[a.type]??=[]).push(a);return acc},{});
- return <div className={`app ${selected&&!selected.review?'assetDetailsOpen':''}`}>
+ return <><div className={`app ${selected&&!selected.review?'assetDetailsOpen':''}`}>
   <header><div className="headerLeft"><div className="appMenuWrap" ref={menuRef}><button className={`settingsIcon ${menuOpen?'navActive':''}`} aria-label="Open app menu" aria-expanded={menuOpen} aria-controls="appMenu" title="Menu" onClick={()=>setMenuOpen(!menuOpen)}><Menu size={21}/></button>{menuOpen&&<div className="appMenu" id="appMenu"><button onClick={()=>navigate('settings')}><SlidersHorizontal size={16}/> Settings</button><button onClick={()=>{setMenuOpen(false);navigate('gallery');setSelected({review:true})}}><AlertTriangle size={16}/> Review <span>{review.length}</span></button><button disabled={saving||state.busy} onClick={()=>{setMenuOpen(false);action('/import',{})}}><RefreshCw size={16}/> Scan collection</button><button onClick={()=>{setMenuOpen(false);navigate('gallery');setUsedOpen(true)}}><Archive size={16}/> Used Crea <span>{stage.used_count||0}</span></button><div className="menuZoom" aria-label="App zoom"><span>Zoom</span><button aria-label="Zoom out" disabled={zoom<=.7} onClick={()=>changeZoom(zoom-.1)}><Minus size={15}/></button><button className="zoomValue" aria-label="Reset zoom" onClick={()=>changeZoom(1)}>{Math.round(zoom*100)}%</button><button aria-label="Zoom in" disabled={zoom>=1.5} onClick={()=>changeZoom(zoom+.1)}><Plus size={15}/></button></div></div>}</div><button className="brand" onClick={()=>navigate('gallery')}><img src="/icons/bird-mark.png" alt=""/><span><strong>CLAN HUB</strong><small>CREA MANAGER</small></span></button></div><div className="headerRight"><span className="count">{assets.length} READY · {state.counts.pending||0} PENDING</span></div></header>
   {error&&<div className="error">{error}</div>}
-  {route==='settings'?<main className="settingsPage"><button className="back" onClick={()=>navigate('gallery')}><ArrowLeft size={16}/> Gallery</button><h1>Settings</h1><LibrarySettings onChanged={refresh}/><DiscordConnections/><section className="settingsCard"><div className="settingsTitle"><h2>Creator colors</h2><p>Colors appear on the information bar of each formatted crea. Changes update existing images.</p></div><div className="settingsRows">{state.creators.map(c=><ColorRow key={c.name} creator={c} save={saveColor} toggle={toggleCreator} saving={saving}/>)}</div></section><MobileSettings/></main>:<>
+  {route==='settings'?<main className="settingsPage"><button className="back" onClick={()=>navigate('gallery')}><ArrowLeft size={16}/> Gallery</button><h1>Settings</h1><LibrarySettings onChanged={refresh}/><DiscordConnections/><GalleryOrderSettings order={state.gallery_order} branches={BRANCHES} types={TYPES} api={api} onChanged={refresh}/><section className="settingsCard"><div className="settingsTitle"><h2>Creator colors</h2></div><div className="settingsRows">{state.creators.map(c=><ColorRow key={c.name} creator={c} save={saveColor} toggle={toggleCreator} saving={saving}/>)}</div></section><MobileSettings/></main>:<>
    {missing.length>0&&<section className="colors"><div><strong>Assign creator colors</strong><p>Choose a color before formatting each creator’s images.</p></div><div className="colorrows">{missing.map(c=><ColorRow key={c.name} creator={c} save={saveColor} saving={saving}/>)}</div></section>}
    <div className="toolbar"><div className="search"><Search size={17}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search crea, code, BP…"/></div><select value={creator} onChange={e=>setCreator(e.target.value)}><option value="all">All creators</option>{state.creators.filter(c=>c.enabled!==0).map(c=><option key={c.name}>{c.name}</option>)}</select></div>
-   <HotStage snapshot={stage} onChanged={refresh}/>
-   <nav className="branches">{Object.entries(BRANCHES).map(([code,label])=><button key={code} className={branch===code?'active':''} onClick={()=>setBranch(code)}>{label}<small>{assets.filter(a=>a.branch===code).length}</small></button>)}</nav>
-   <main>{Object.entries(groups).sort((a,b)=>a[0].localeCompare(b[0])).map(([code,items])=><section className="typeSection" key={code}><button className="typeHead" onClick={()=>setCollapsed({...collapsed,[code]:!collapsed[code]})}>{collapsed[code]?<ChevronRight size={18}/>:<ChevronDown size={18}/>}<strong>{TYPES[code]||code.toUpperCase()}</strong><span>{items.length}</span></button>{!collapsed[code]&&<div className="grid">{items.map(a=><div className={`card ${stage.hot?.items.some(i=>i.id===a.id)?'selectedCard':hotFull?'fullCard':''}`} key={a.id} role="button" tabIndex={hotFull&&!stage.hot?.items.some(i=>i.id===a.id)?-1:0} aria-disabled={hotFull&&!stage.hot?.items.some(i=>i.id===a.id)} aria-label={stage.hot?.items.some(i=>i.id===a.id)?`Remove ${a.relpath} from Hot Staging`:hotFull?`Hot Staging full; details for ${a.relpath} available`:`Add ${a.relpath} to Hot Staging`} onClick={()=>toggleHot(a.id)} onKeyDown={e=>{if(e.target===e.currentTarget&&(e.key==='Enter'||e.key===' ')){e.preventDefault();toggleHot(a.id)}}}><img loading="lazy" src={`/api/image/${a.id}/thumb?rev=${a.render_key||''}`}/><span className="selectMark">{stage.hot?.items.some(i=>i.id===a.id)?'✓':'+'}</span><button className="cardInfo" title="Asset details" aria-label={`Details for ${a.relpath}`} onClick={e=>{e.stopPropagation();setSelected(a)}}><Info size={16}/></button></div>)}</div>}</section>)}{!shown.length&&<div className="empty">{state.busy?'Formatting collection…':missing.length?'Choose creator colors to start formatting.':'No crea match this view.'}</div>}</main>
+
+   <nav className="branches">{(state.gallery_order?.branches||Object.keys(BRANCHES)).map(code=><button key={code} className={branch===code?'active':''} onClick={()=>setBranch(code)}>{BRANCHES[code]}<small>{assets.filter(a=>a.branch===code).length}</small></button>)}</nav>
+   <main>{orderedCodes(Object.keys(groups),state.gallery_order?.types[branch]).map(code=><section className="typeSection" key={code}><button className="typeHead" onClick={()=>setCollapsed({...collapsed,[code]:!collapsed[code]})}>{collapsed[code]?<ChevronRight size={18}/>:<ChevronDown size={18}/>}<strong>{TYPES[code]||code.toUpperCase()}</strong><span>{groups[code].length}</span></button>{!collapsed[code]&&<div className="grid">{groups[code].map(a=><div className={`card ${stage.hot?.items.some(i=>i.id===a.id)?'selectedCard':hotFull?'fullCard':''}`} key={a.id} role="button" tabIndex={hotFull&&!stage.hot?.items.some(i=>i.id===a.id)?-1:0} aria-disabled={hotFull&&!stage.hot?.items.some(i=>i.id===a.id)} aria-label={stage.hot?.items.some(i=>i.id===a.id)?`Remove ${a.relpath} from Hot Staging`:hotFull?`Hot Staging full; details for ${a.relpath} available`:`Add ${a.relpath} to Hot Staging`} onClick={()=>toggleHot(a.id)} onKeyDown={e=>{if(e.target===e.currentTarget&&(e.key==='Enter'||e.key===' ')){e.preventDefault();toggleHot(a.id)}}}><img loading="lazy" src={`/api/image/${a.id}/thumb?rev=${a.render_key||''}`}/><span className="selectMark">{stage.hot?.items.some(i=>i.id===a.id)?'✓':'+'}</span><button className="cardInfo" title="Asset details" aria-label={`Details for ${a.relpath}`} onClick={e=>{e.stopPropagation();setSelected(a)}}><Info size={16}/></button></div>)}</div>}</section>)}{!shown.length&&<div className="empty">{state.busy?'Formatting collection…':missing.length?'Choose creator colors to start formatting.':'No crea match this view.'}</div>}</main>
    <ReserveStage snapshot={stage} onChanged={refresh} used={used} usedOpen={usedOpen} onCloseUsed={()=>setUsedOpen(false)}/>
    {selected&&<div className="overlay" onClick={()=>setSelected(null)}><aside className="panel" onClick={e=>e.stopPropagation()}><div className="panelHead"><strong>{selected.review?'Import review':TYPES[selected.type]}</strong><button onClick={()=>setSelected(null)}>Close</button></div>{selected.review?<div className="reviewList">{review.length?review.map(a=><div key={a.id}><b>{a.relpath}</b><p>{a.issue}</p></div>):'No issues.'}</div>:<><img className="preview" src={`/api/image/${selected.id}/formatted?rev=${selected.render_key||''}`}/><div className="details"><b>{selected.relpath}</b><span>{selected.width}×{selected.height} source · {selected.bp==null?'No BP':`${selected.bp} BP`}</span></div><div className="editor"><h3><SlidersHorizontal size={17}/> Image placement</h3><div className="segmented"><button className={selected.mode==='fit'?'active':''} onClick={()=>action(`/assets/${selected.id}/format`,{mode:'fit'})}>Fit full image</button><button className={selected.mode==='crop'?'active':''} onClick={()=>action(`/assets/${selected.id}/format`,{mode:'crop',focal_x:.5,focal_y:.5})}>Crop to fill</button></div>{selected.mode==='crop'&&<><label>Horizontal crop <input type="range" min="0" max="1" step=".01" defaultValue={selected.focal_x} onPointerUp={e=>action(`/assets/${selected.id}/format`,{mode:'crop',focal_x:Number(e.currentTarget.value),focal_y:selected.focal_y})}/></label><label>Vertical crop <input type="range" min="0" max="1" step=".01" defaultValue={selected.focal_y} onPointerUp={e=>action(`/assets/${selected.id}/format`,{mode:'crop',focal_x:selected.focal_x,focal_y:Number(e.currentTarget.value)})}/></label></>}</div></>}</aside></div>}
   </>}
- </div>
+ </div>{hotDock&&createPortal(<DiscordComposer snapshot={stage} onChanged={refresh} reply={reply} onClearReply={onClearReply} mentionMembers={mentionMembers} teams={teams} teamColors={teamColors}/>,hotDock)}</>
 }
-createRoot(document.getElementById('root')).render(location.pathname==='/mobile'?<Mobile/>:<WorkspaceShell><App/></WorkspaceShell>);
+createRoot(document.getElementById('root')).render(location.pathname==='/mobile'?<Mobile/>:<WorkspaceShell>{(hotDock,reply,onClearReply,mentionMembers,teams,teamColors)=><App hotDock={hotDock} reply={reply} onClearReply={onClearReply} mentionMembers={mentionMembers} teams={teams} teamColors={teamColors}/>}</WorkspaceShell>);

@@ -19,9 +19,13 @@ import staging
 import mobile_auth
 import workspace
 import library_settings
-import communications
 from communications.manager import ConnectionManager
 import test_submissions
+import composer
+import discord_reactions
+import discord_teams
+import gallery_order
+import used_transfer
 
 LOCK=threading.Lock()
 WAKE=threading.Event()
@@ -119,16 +123,36 @@ class Handler(BaseHTTPRequestHandler):
             creators=[dict(x) for x in con.execute('select name,color,enabled from creators order by name')]
             counts={x['status']:x['n'] for x in con.execute('''select a.status,count(*) n from assets a left join creators c on c.name=a.creator
                 where c.enabled=1 or a.creator is null group by a.status''')}
-            con.close();return self.send_json({'creators':creators,'counts':counts,'busy':BUSY})
+            order=gallery_order.read(con)
+            con.close();return self.send_json({'creators':creators,'counts':counts,'busy':BUSY,'gallery_order':order})
         if p=='/api/library': return self.send_json(library_settings.status())
         if p=='/api/communications':
             q=parse_qs(u.query);return self.send_json(CONNECTIONS.snapshot(int(q.get('after',['0'])[0]),q.get('channel',[None])[0]))
         if p=='/api/communications/history':
-            q=parse_qs(u.query);return self.send_json(CONNECTIONS.history(q.get('channel',[''])[0],q.get('before',[None])[0]))
+            q=parse_qs(u.query)
+            channel=q.get('channel',[''])[0]
+            cursors={key:q[key][0] for key in ('before','around','after') if key in q}
+            if (not re.fullmatch(r'[0-9]{1,24}', channel) or len(cursors)>1
+                    or any(not re.fullmatch(r'[0-9]{1,24}', value) for value in cursors.values())):
+                return self.send_json({'error':'Invalid Discord history cursor'},400)
+            return self.send_json(CONNECTIONS.history(channel,**cursors))
+        if p=='/api/communications/quick-reactions':return self.send_json(discord_reactions.preferences())
+        if p=='/api/communications/mentions':
+            q=parse_qs(u.query)
+            try:return self.send_json(CONNECTIONS.mention_options(q.get('guild',[''])[0],q.get('q',[''])[0]))
+            except ValueError as error:return self.send_json({'error':str(error)},400)
+        if p=='/api/communications/team-colors':return self.send_json(discord_teams.color_view())
+        if p=='/api/communications/teams':
+            guild_id=parse_qs(u.query).get('guild',[''])[0]
+            try: return self.send_json(discord_teams.members(guild_id))
+            except ValueError as error: return self.send_json({'error':str(error)},400)
+        if p=='/api/communications/destination':return self.send_json(CONNECTIONS.destination_options())
         if p=='/api/communications/profiles':return self.send_json(CONNECTIONS.status())
-        if p=='/api/communications/colors':return self.send_json(communications.colors())
-        if p=='/api/communications/write-status':return self.send_json(CONNECTIONS.writer().status())
+        if p=='/api/communications/composer':return self.send_json(composer.status())
+        if p=='/api/communications/test-mode':return self.send_json({'enabled':test_submissions.test_mode()})
+        if p=='/api/communications/write-status':return self.send_json({**CONNECTIONS.writer().status(),'test_mode':test_submissions.test_mode()})
         if p=='/api/communications/test-send':return self.send_json(test_submissions.current_result())
+        if p=='/api/used/export':return self.send_json(used_transfer.export_used())
         if p=='/api/assets':
             q=parse_qs(u.query); status=q.get('status',['ready'])[0]
             return self.send_json(visible_assets(status))
@@ -195,29 +219,45 @@ class Handler(BaseHTTPRequestHandler):
             if p=='/api/workspace/draft':return self.send_json(workspace.save(body.get('text'),body.get('asset_ids'),body.get('channel_url',''),body.get('reply_to_id','')))
             if p=='/api/workspace/draft/transition':return self.send_json(workspace.transition(body.get('status'),body.get('manual_confirmation',False)))
             if p=='/api/workspace/draft/new':return self.send_json(workspace.new_draft())
+            if p=='/api/communications/quick-reactions':return self.send_json(discord_reactions.save(body.get('slots')))
+            if p=='/api/communications/react':return self.send_json(discord_reactions.add(body, CONNECTIONS.writer()))
+            if p=='/api/communications/team-colors':
+                enabled=body.get('enabled')
+                if type(enabled) is not bool:raise ValueError('Invalid team color preference')
+                return self.send_json(discord_teams.color_view(enabled))
+            if p=='/api/communications/teams':
+                return self.send_json(discord_teams.assign(body.get('guild_id'),body.get('user_id'),body.get('name'),body.get('team')))
+            if p=='/api/gallery/order':return self.send_json(gallery_order.save(body))
+            if p=='/api/communications/destination':return self.send_json(CONNECTIONS.select_destination(body.get('profile_id'),body.get('guild_id'),body.get('channel_id')))
+            if p=='/api/communications/profiles/shared':return self.send_json(CONNECTIONS.select_shared(body.get('profile_id')))
             if p=='/api/communications/profiles/select':return self.send_json(CONNECTIONS.select(body.get('read'),body.get('write')))
             if p=='/api/communications/profiles/reconnect':return self.send_json(CONNECTIONS.reconnect(body.get('profile_id')))
-            if p=='/api/communications/test-send':return self.send_json(test_submissions.send_current(body.get('draft_id'),CONNECTIONS.writer()))
+            if p=='/api/communications/test-mode':return self.send_json(test_submissions.set_test_mode(body.get('enabled')))
+            if p=='/api/communications/composer':return self.send_json(composer.send(body, CONNECTIONS.writer()))
+            if p=='/api/communications/composer/resolve':return self.send_json(composer.resolve(body.get('id'), body.get('posted')))
+            if p=='/api/communications/test-send':
+                provider = CONNECTIONS.writer(configured_test=True)
+                return self.send_json(test_submissions.send_current(body.get('draft_id'), provider, body.get('destination'), body.get('test_mode')))
             if p=='/api/library/apply':return self.send_json(library_settings.apply(body.get('path')))
             if p=='/api/library/rescan':
                 if not LOCK.acquire(blocking=False):return self.send_json({'error':'Import busy'},409)
                 try: result=library_settings.rescan()
                 finally: LOCK.release()
                 background_format();return self.send_json(result)
-            if p=='/api/communications/color':return self.send_json(communications.set_color(body.get('user_id'),body.get('color')))
             m=re.fullmatch(r'/api/staging/hot/items/([0-9a-f-]{36})/remove',p)
             if m:return self.send_json(staging.remove_from_hot(m.group(1)))
-            if p=='/api/staging/hot/reserve':return self.send_json(staging.reserve_hot(body.get('package_id')))
+            if p=='/api/staging/hot/reserve':return self.send_json(staging.reserve_hot(body.get('package_id'),body.get('submission'),body.get('mentions')))
             if p=='/api/staging/hot/confirm':
                 if self.mobile_request() and (not isinstance(body.get('package_id'),str) or not isinstance(body.get('asset_ids'),list)):
                     return self.send_json({'error':'Mobile confirmation requires a package and its crea'},400)
                 return self.send_json(staging.confirm_hot(body.get('package_id'),body.get('asset_ids')))
             if p=='/api/staging/deployments/undo':return self.send_json(staging.undo_last_deployment())
+            if p=='/api/used/import':return self.send_json(used_transfer.import_used(body))
             if p=='/api/used/restore':return self.send_json(staging.restore(None if body.get('all') else body.get('asset_ids',[])))
             m=re.fullmatch(r'/api/staging/reserve/([0-9a-f-]{36})/activate',p)
             if m:return self.send_json(staging.activate(m.group(1)))
             m=re.fullmatch(r'/api/staging/packages/([0-9a-f-]{36})/(submission|acknowledge)',p)
-            if m:return self.send_json(staging.save_submission(m.group(1),body.get('submission')) if m.group(2)=='submission' else staging.acknowledge(m.group(1)))
+            if m:return self.send_json(staging.save_submission(m.group(1),body.get('submission'),body.get('mentions')) if m.group(2)=='submission' else staging.acknowledge(m.group(1)))
             if p=='/api/import':
                 if not LOCK.acquire(blocking=False): return self.send_json({'error':'Import busy'},409)
                 try: result=scan()
@@ -254,6 +294,7 @@ if __name__=='__main__':
         from desktop_data import migrate
         migrate(Path(os.environ['CH_LEGACY_DATA']), DATA)
     db().close()
+    composer.recover()
     mobile_auth.setup()
     CONNECTIONS.start()
     threading.Thread(target=format_worker,daemon=True).start()

@@ -1,8 +1,8 @@
 """Backend-only environment loading; never serialize this mapping to clients."""
 import os
-from crea_core import ROOT
 
 def load_environment():
+    from crea_core import ROOT
     values={}
     roots=[os.path.join(str(ROOT),'.env'),os.path.join(os.environ.get('CH_DATA_DIR',os.path.join(str(ROOT),'data')),'.env')]
     for path in roots:

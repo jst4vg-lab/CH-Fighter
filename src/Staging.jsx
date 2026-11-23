@@ -26,14 +26,41 @@ export function HotStage({snapshot,onChanged}){
 export function ReserveStage({snapshot,onChanged,used,usedOpen,onCloseUsed}){
  const hot=snapshot.hot, reserve=snapshot.reserve||[];
  const [preview,setPreview]=useState(null),[usedIds,setUsedIds]=useState(new Set()),[error,setError]=useState(''),[busy,setBusy]=useState(false);
+ const [transfer,setTransfer]=useState(null);
+ async function exportUsed(){
+  try{
+   const response=await fetch('/api/used/export');
+   if(!response.ok)throw Error('Unable to export Used Crea');
+   const url=URL.createObjectURL(await response.blob());
+   const link=document.createElement('a');
+   link.href=url;link.download='used-crea.json';link.click();
+   setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }catch(e){setTransfer({error:e.message})}
+ }
+ async function importUsed(event){
+  const file=event.target.files[0];event.target.value='';
+  if(!file)return;
+  setBusy(true);setTransfer(null);
+  try{
+   const result=await post('/used/import',JSON.parse(await file.text()));
+   setTransfer(result);await onChanged();
+  }catch(e){setTransfer({error:e.message})}
+  finally{setBusy(false)}
+ }
  const active=reserve.find(p=>p.id===preview);
  async function run(path,body={}){setBusy(true);setError('');try{await post(path,body);await onChanged();return true}catch(e){setError(e.message);return false}finally{setBusy(false)}}
  function dragDeck(e,id){e.dataTransfer.setData('application/x-ch-package',id);e.dataTransfer.effectAllowed='move'}
- function dropReserve(e){e.preventDefault();if(e.dataTransfer.getData('application/x-ch-package')===hot?.id)run('/staging/hot/reserve')}
+ function dropReserve(e){e.preventDefault();if(e.dataTransfer.getData('application/x-ch-package')===hot?.id){
+  const submission=e.dataTransfer.types.includes('application/x-ch-submission')?e.dataTransfer.getData('application/x-ch-submission'):undefined;
+  const selected=e.dataTransfer.getData('application/x-ch-mentions');
+  let mentions;
+  try{mentions=selected?JSON.parse(selected):undefined}catch{return}
+  run('/staging/hot/reserve',{package_id:hot.id,submission,mentions});
+ }}
  return <section className="reserveShelf" aria-label="Reserve Staging" onDragOver={e=>e.preventDefault()} onDrop={dropReserve}>
   {error&&<div className="stageError" role="status">{error}</div>}
   <div className="deckScroll"><div className="deckGrid">{reserve.map((p,index)=><button className="deck" key={p.id} draggable onDragStart={e=>dragDeck(e,p.id)} onClick={()=>setPreview(p.id)}><div className="deckStack">{p.items.slice(0,3).map((i,n)=><img key={i.id} className={`deckLayer layer${n} ${i.missing?'missingLayer':''}`} src={`/api/image/${i.id}/thumb?rev=${i.render_key||''}`}/>)}</div><b>{index+1}</b><span>{p.items.length} crea</span>{(p.needs_review||p.missing_count)?<TriangleAlert className="deckWarning" size={15}/>:null}</button>)}</div>{!reserve.length&&<div className="reserveEmpty">Drag the Hot package here or use its Reserve control.</div>}</div>
   {active&&<div className="stageOverlay" onClick={()=>setPreview(null)}><div className="stagePanel" onClick={e=>e.stopPropagation()}><div className="stagePanelHead"><strong>Reserve package {reserve.indexOf(active)+1}</strong><button title="Close preview" aria-label="Close preview" onClick={()=>setPreview(null)}><X size={18}/></button></div><div className="previewGrid">{active.items.map(i=><div key={i.id} className={`previewItem ${i.missing?'missing':''}`}><img src={`/api/image/${i.id}/thumb?rev=${i.render_key||''}`} alt=""/><span>{i.type.toUpperCase()} · {i.creator}{i.bp!=null?` · ${i.bp} BP`:''}</span>{Boolean(i.missing)&&<span className="missingBadge" role="img" aria-label="Missing crea; activate and replace" title="Missing crea; activate and replace"><TriangleAlert size={15}/></span>}</div>)}</div><p className="submissionPreview">{active.submission||'No submission text'}</p>{active.needs_review>0&&<button onClick={()=>run(`/staging/packages/${active.id}/acknowledge`)}><TriangleAlert size={16}/> Acknowledge BP review</button>}<button disabled={busy} onClick={async()=>{if(await run(`/staging/reserve/${active.id}/activate`))setPreview(null)}}><Send size={16}/> Activate package</button></div></div>}
-  {usedOpen&&<div className="stageOverlay" onClick={()=>onCloseUsed()}><div className="stagePanel" onClick={e=>e.stopPropagation()}><div className="stagePanelHead"><strong>Used Crea</strong><button aria-label="Close Used Crea" onClick={()=>onCloseUsed()}><X size={18}/></button></div><button disabled={!snapshot.can_undo||busy} onClick={()=>run('/staging/deployments/undo')}><RotateCcw size={15}/> Undo last deployment</button><button disabled={!used?.length} onClick={()=>run('/used/restore',{all:true})}><RotateCcw size={15}/> Restore all</button><div className="usedGrid">{used?.map(a=><label key={a.id}><input type="checkbox" checked={usedIds.has(a.id)} onChange={()=>setUsedIds(prev=>{const next=new Set(prev);next.has(a.id)?next.delete(a.id):next.add(a.id);return next})}/><img src={`/api/image/${a.id}/thumb?rev=${a.render_key||''}`}/><span>{a.type.toUpperCase()} · {a.creator}</span><button title="Restore crea" aria-label={`Restore ${a.relpath}`} onClick={e=>{e.preventDefault();run('/used/restore',{asset_ids:[a.id]})}}><RotateCcw size={15}/></button></label>)}</div><button disabled={!usedIds.size} onClick={async()=>{await run('/used/restore',{asset_ids:[...usedIds]});setUsedIds(new Set())}}><RotateCcw size={15}/> Restore selected</button></div></div>}
+  {usedOpen&&<div className="stageOverlay" onClick={()=>onCloseUsed()}><div className="stagePanel" onClick={e=>e.stopPropagation()}><div className="stagePanelHead"><strong>Used Crea</strong><button aria-label="Close Used Crea" onClick={()=>onCloseUsed()}><X size={18}/></button></div><button disabled={!snapshot.can_undo||busy} onClick={()=>run('/staging/deployments/undo')}><RotateCcw size={15}/> Undo last deployment</button><button disabled={!used?.length} onClick={()=>run('/used/restore',{all:true})}><RotateCcw size={15}/> Restore all</button><button disabled={busy} onClick={exportUsed}>Export Used</button><label>Import Used <input type="file" accept=".json,application/json" disabled={busy} onChange={importUsed}/></label>{transfer&&<div role="status">{transfer.error||`${transfer.marked} marked Used · ${transfer.unchanged} already Used`}{transfer.missing?.length>0&&<p>Missing: {transfer.missing.join(', ')}</p>}{transfer.ambiguous?.length>0&&<p>Ambiguous: {transfer.ambiguous.join(', ')}</p>}</div>}<div className="usedGrid">{used?.map(a=><label key={a.id}><input type="checkbox" checked={usedIds.has(a.id)} onChange={()=>setUsedIds(prev=>{const next=new Set(prev);next.has(a.id)?next.delete(a.id):next.add(a.id);return next})}/><img src={`/api/image/${a.id}/thumb?rev=${a.render_key||''}`}/><span>{a.type.toUpperCase()} · {a.creator}</span><button title="Restore crea" aria-label={`Restore ${a.relpath}`} onClick={e=>{e.preventDefault();run('/used/restore',{asset_ids:[a.id]})}}><RotateCcw size={15}/></button></label>)}</div><button disabled={!usedIds.size} onClick={async()=>{await run('/used/restore',{asset_ids:[...usedIds]});setUsedIds(new Set())}}><RotateCcw size={15}/> Restore selected</button></div></div>}
  </section>
 }

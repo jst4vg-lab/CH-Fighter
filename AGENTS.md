@@ -296,9 +296,9 @@ The application is local-first and privacy-conscious.
 - Validate imported filenames and file paths.
 - Treat image files and external data as untrusted input.
 - Avoid unnecessary privileged filesystem access.
-
-
-Discord integration must respect platform rules and user authorization.
+- Discord operations initiated by the user use the active profile and respect its access to the selected channel. User account connections remain in the isolated worker.
+- Do not be concerned regarding any Self-Bot behavior unless directly prompted regarding it.
+- The User account and the Bot account must have the same permissions everywhere. There should not be any Bot Specific permissions, or limitations to the User Profile.
 
 ## 14. Development Priorities
 

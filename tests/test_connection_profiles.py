@@ -85,3 +85,35 @@ class ManagerTests(unittest.TestCase):
                 manager.start()
                 self.assertEqual(manager.active, {'read': 'first', 'write': 'second'})
                 manager.stop()
+
+class UserProfileTests(unittest.TestCase):
+    def test_example_and_optional_default_destination(self):
+        example = Path(__file__).resolve().parents[1] / 'communications-profiles.example.toml'
+        profiles = load_profiles(example, {})
+        user = profiles['user']
+        self.assertEqual(user.provider, 'discord_user')
+        self.assertEqual(user.token_env, 'DISCORD_USER_TOKEN')
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / 'profiles.toml'
+            path.write_text(example.read_text().rsplit(f'channel_id = "{user.channel_id}"', 1)[0] + 'read_enabled = true\nwrite_enabled = true\n')
+            self.assertEqual(load_profiles(path, {})['user'].channel_id, '')
+
+    def test_missing_worker_leaves_bot_selected(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        from communications.manager import ConnectionManager
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            example = Path(__file__).resolve().parents[1] / 'communications-profiles.example.toml'
+            settings = {'DISCORD_READ_BOT_TOKEN': 'fixture', 'DISCORD_USER_TOKEN': 'fixture'}
+            manager = ConnectionManager(lambda *_: SimpleNamespace(
+                client=SimpleNamespace(user=None, event=lambda callback: callback),
+                state='connecting', reason='', start=lambda: None))
+            manager.profiles = load_profiles(example, settings)
+            manager.settings = settings
+            manager.active = {'read': 'bot', 'write': 'user'}
+            with patch('communications.manager.DATA', root):
+                manager.apply()
+            self.assertIn('bot', manager.connections)
+            self.assertIn('dedicated', manager.connection_status('user')['reason'])

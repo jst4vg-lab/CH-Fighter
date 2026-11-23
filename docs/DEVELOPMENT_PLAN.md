@@ -2,7 +2,7 @@
 
 ## Milestone 2 status
 
-The read-only provider, normalized event cache, custom desktop feed, local name-color preference, and host Crea Library setting are implemented. Live Discord permissions, message-content intent, role/member completeness, attachment rendering, and KDE behavior still require a configured bot and user testing. The outgoing provider remains disabled by default; a production write provider with transactional Used Crea transition is a later milestone. Focused Mode currently filters exact author IDs and direct reply references. Enhanced role gradients, richer reply previews, and complete event recovery after a long offline period remain future work. Do not use a user account token.
+The read-only provider, normalized event cache, custom desktop feed, local name-color preference, and host Crea Library setting are implemented. Live Discord permissions, message-content intent, role/member completeness, attachment rendering, and KDE behavior still require a configured bot and user testing. The outgoing provider remains disabled by default; a production write provider with transactional Used Crea transition is a later milestone. Focused Mode currently filters exact author IDs and direct reply references. Enhanced role gradients, richer reply previews, and complete event recovery after a long offline period remain future work.
 
 An authorized write-bot provider now supports explicit, test-channel-only text, formatted files, and reply sends when separately configured. It records acknowledgment IDs but deliberately does not change Used Crea. Live test-channel behavior remains unverified until a write bot and channel are configured. The next milestone should connect an authorized production send to the existing deployment transaction only after its identity, permission, and recovery behavior are field-tested.
 
@@ -25,3 +25,11 @@ Mobile touch interaction overhaul implemented in the React build: Embla branch s
 Mobile Send now follows desktop's two-step clipboard and confirmation flow. The phone arms Confirm sent only after the Framework reports clipboard success; Hot changes or disconnection reset it. Backend confirmation checks the copied package and asset IDs in the same transaction that marks crea used and replenishes Reserve. Verify the full copy, paste, confirm, and undo sequence on the paired phone and desktop.
 
 The connection profile milestone adds independent saved read and write selections, shared bot clients, and Discord status in desktop Settings. Validate each real bot's intents and channel permissions before enabling test delivery. Production delivery remains a separate milestone.
+
+## Discord reply workflow
+
+- Add a keyboard-accessible Reply action to each message. It should set the composer target and focus the text field. Show the target author's name and a short preview above the composer, with a clear action to cancel the reply.
+- Persist a reply target as guild, channel, and message IDs alongside the draft. Keep the target on a failed or unverified send. Clear it after a confirmed send or explicit cancellation. Never reuse it in another destination.
+- Render references in the feed using the loaded parent message when available. Add an authorized history lookup for unloaded parents, scoped to the active channel. Show a neutral unavailable state for deleted or inaccessible parents. Clicking the preview jumps to a loaded parent or opens its Discord link.
+- At dispatch, validate the reply against the active bot destination and use the existing Discord message reference. Suppress author mentions by default. Reject deleted or cross-channel targets without sending a standalone message or changing Crea state.
+- Test selection, cancellation, profile and channel switches, deleted parents, mention behavior, failed sends, and successful attachment replies using fixtures. Verify keyboard focus and viewport behavior in the desktop build.

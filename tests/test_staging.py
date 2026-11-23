@@ -20,6 +20,29 @@ class StagingTests(unittest.TestCase):
 
     def tearDown(self):self.patch.stop();self.tmp.cleanup()
 
+    def test_used_transfer_matches_moved_asset_and_replenishes(self):
+        import used_transfer
+        con=db()
+        digest='a'*64
+        con.execute("update assets set sha256=? where id='a'",(digest,))
+        con.commit();con.close()
+        staging.add_to_hot(['a'])
+        staging.confirm_hot()
+        exported=used_transfer.export_used()
+        staging.restore(['a'])
+        staging.add_to_hot(['a'])
+        staging.reserve_hot()
+        staging.add_to_hot(['a','d'])
+        con=db()
+        con.execute("update assets set relpath='renamed.png' where id='a'")
+        con.commit();con.close()
+        self.assertEqual(used_transfer.import_used(exported)['marked'],1)
+        result=staging.snapshot()
+        self.assertEqual([item['id'] for item in result['hot']['items']],['d'])
+        self.assertEqual(result['reserve'][0]['items'][0]['id'],'b')
+        self.assertEqual(result['reserve'][0]['needs_review'],1)
+        self.assertEqual(used_transfer.import_used(exported)['unchanged'],1)
+
     def test_hot_reserve_swap_submission_and_replenishment(self):
         staging.add_to_hot(['a'])
         staging.reserve_hot()

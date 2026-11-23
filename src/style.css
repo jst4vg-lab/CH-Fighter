@@ -134,3 +134,9 @@ html,body,#root,.app{max-width:100%;min-width:0}
 .hotItem.removePending img{filter:grayscale(1) brightness(.45)}
 .hotItem .trashBadge{position:absolute;inset:0;display:grid;place-items:center;color:#fff;pointer-events:none}
 .hotItem.removePending{outline:2px solid #e8b6a0;border-radius:4px}
+
+/* Uniform scrollbars for application-owned surfaces. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #657260 transparent;
+}

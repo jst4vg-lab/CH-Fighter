@@ -1,10 +1,17 @@
 """Own the Discord client, worker loop, and authentication lifecycle."""
 import asyncio
+from importlib.metadata import PackageNotFoundError, version
 import threading
 
 
 class BotConnection:
     def __init__(self, token, read):
+        try:
+            version('discord.py-self')
+        except PackageNotFoundError:
+            pass
+        else:
+            raise ValueError('Install only discord.py in the bot backend environment')
         import discord
         self.token = token
         self.discord = discord

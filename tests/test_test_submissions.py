@@ -46,6 +46,21 @@ class TestSubmissionTests(unittest.TestCase):
         self.assertEqual(next_draft['text'],'Changed')
         con=db();self.assertEqual(con.execute("select used from assets where id='a'").fetchone()[0],0);con.close()
 
+    def test_test_mode_off_marks_confirmed_hot_package_used(self):
+        import staging
+        staging.add_to_hot(['a'])
+        draft = workspace.save('Deploy', ['a'])
+        provider = FakeWriteProvider()
+        self.assertTrue(test_submissions.test_mode())
+        test_submissions.set_test_mode(False)
+        with self.assertRaisesRegex(ValueError, 'Test mode changed'):
+            test_submissions.send_current(draft['id'], provider, expected_test_mode=True)
+        self.assertEqual(provider.calls, [])
+        sent = test_submissions.send_current(draft['id'], provider, expected_test_mode=False)
+        self.assertEqual(sent['status'], 'confirmed')
+        self.assertIsNone(staging.snapshot()['hot'])
+        self.assertEqual(staging.snapshot()['used_count'], 1)
+
     def test_missing_attachment_and_unavailable_provider_preserve_draft(self):
         draft=workspace.save('Test',['a'])
         self.assertEqual(test_submissions.send_current(draft['id'],DisabledWriteProvider())['code'],'provider_unavailable')
@@ -61,6 +76,19 @@ class TestSubmissionTests(unittest.TestCase):
         second=test_submissions.send_current(draft['id'],provider)
         self.assertEqual((first['status'],second['status']),('unverified','unverified'))
         self.assertEqual(len(provider.calls),1)
+
+    def test_user_send_rejects_stale_destination(self):
+        draft = workspace.save('Test', [])
+        provider = FakeWriteProvider()
+        status = {**provider.status(), 'provider': 'discord_user', 'sender_id': '555', 'guild_id': '111'}
+        with patch.object(provider, 'status', return_value=status):
+            destination = {key: status[key] for key in ('provider', 'sender_id', 'guild_id', 'channel_id')}
+            stale = {**destination, 'sender_id': '666'}
+            result = test_submissions.send_current(draft['id'], provider, stale)
+            self.assertEqual(result['code'], 'destination_changed')
+            self.assertEqual(provider.calls, [])
+            self.assertIsNone(test_submissions.current_result())
+            self.assertEqual(test_submissions.send_current(draft['id'], provider, destination)['status'], 'confirmed')
 
     def test_provider_selection_requires_explicit_bot_configuration(self):
         self.assertIsInstance(select_provider({'DISCORD_WRITE_PROVIDER':'disabled'}),DisabledWriteProvider)
