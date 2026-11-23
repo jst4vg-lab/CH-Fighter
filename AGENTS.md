@@ -296,7 +296,7 @@ The application is local-first and privacy-conscious.
 - Validate imported filenames and file paths.
 - Treat image files and external data as untrusted input.
 - Avoid unnecessary privileged filesystem access.
-- Never implement Discord user-account automation or self-bot behavior.
+
 
 Discord integration must respect platform rules and user authorization.
 
