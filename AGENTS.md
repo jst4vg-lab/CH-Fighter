@@ -3,11 +3,11 @@
 
 ## 1. Project Identity
 
-Clan Hub Crea Manager is a local-first image asset management and deployment application designed for the Clan Hub (CH) community.
+Clan Hub Command Suite extends the local-first Crea Manager for the Clan Hub (CH) community. The existing Crea Manager remains a core module and must stay functional during the transition.
 
 Its primary purpose is to organize, format, browse, stage, and deploy image assets ("crea") efficiently during CH wars conducted through Discord.
 
-This is a specialized operational tool, not a generic photo gallery, military simulator, or Discord replacement.
+Milestone 1 adds an isolated communications experiment and local draft workspace. Discord web content is a manual display surface, not a message-processing API. The full architecture and feasibility boundaries are in `docs/COMMAND_SUITE_ARCHITECTURE.md` and `docs/COMMUNICATIONS_FEASIBILITY.md`.
 
 Prioritize:
 1. Speed and efficiency

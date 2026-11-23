@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import argparse
+import signal
 import mimetypes
 import re
 import threading
@@ -16,6 +17,11 @@ from urllib.parse import urlparse,parse_qs
 from crea_core import ROOT,SOURCE,DATA,FORMATTED,THUMBS,db,scan,format_pending,visible_assets
 import staging
 import mobile_auth
+import workspace
+import library_settings
+import communications
+from communications.manager import ConnectionManager
+import test_submissions
 
 LOCK=threading.Lock()
 WAKE=threading.Event()
@@ -26,6 +32,7 @@ DESKTOP_SECRET=os.environ.get('CH_DESKTOP_SECRET','')
 CLIPBOARD_LOCK=threading.Lock()
 CLIPBOARD_REQUESTS={}
 CLIPBOARD_PENDING=None
+CONNECTIONS = ConnectionManager()
 
 def host_name(value):
     return (value or '').split(':',1)[0].lower()
@@ -113,10 +120,21 @@ class Handler(BaseHTTPRequestHandler):
             counts={x['status']:x['n'] for x in con.execute('''select a.status,count(*) n from assets a left join creators c on c.name=a.creator
                 where c.enabled=1 or a.creator is null group by a.status''')}
             con.close();return self.send_json({'creators':creators,'counts':counts,'busy':BUSY})
+        if p=='/api/library': return self.send_json(library_settings.status())
+        if p=='/api/communications':
+            q=parse_qs(u.query);return self.send_json(CONNECTIONS.snapshot(int(q.get('after',['0'])[0]),q.get('channel',[None])[0]))
+        if p=='/api/communications/history':
+            q=parse_qs(u.query);return self.send_json(CONNECTIONS.history(q.get('channel',[''])[0],q.get('before',[None])[0]))
+        if p=='/api/communications/profiles':return self.send_json(CONNECTIONS.status())
+        if p=='/api/communications/colors':return self.send_json(communications.colors())
+        if p=='/api/communications/write-status':return self.send_json(CONNECTIONS.writer().status())
+        if p=='/api/communications/test-send':return self.send_json(test_submissions.current_result())
         if p=='/api/assets':
             q=parse_qs(u.query); status=q.get('status',['ready'])[0]
             return self.send_json(visible_assets(status))
         if p=='/api/staging':return self.send_json(staging.snapshot())
+        if p=='/api/workspace/draft':return self.send_json(workspace.current())
+        if p=='/api/workspace/drafts':return self.send_json(workspace.history())
         if p.startswith('/api/image/'):
             parts=p.split('/')
             if len(parts)!=5 or parts[4] not in ('thumb','formatted'): return self.send_error(404)
@@ -174,6 +192,19 @@ class Handler(BaseHTTPRequestHandler):
                 if self.mobile_request(): return self.send_error(403)
                 mobile_auth.revoke();return self.send_json({'ok':True})
             if p=='/api/staging/hot/items':return self.send_json(staging.add_to_hot(body.get('asset_ids',[])))
+            if p=='/api/workspace/draft':return self.send_json(workspace.save(body.get('text'),body.get('asset_ids'),body.get('channel_url',''),body.get('reply_to_id','')))
+            if p=='/api/workspace/draft/transition':return self.send_json(workspace.transition(body.get('status'),body.get('manual_confirmation',False)))
+            if p=='/api/workspace/draft/new':return self.send_json(workspace.new_draft())
+            if p=='/api/communications/profiles/select':return self.send_json(CONNECTIONS.select(body.get('read'),body.get('write')))
+            if p=='/api/communications/profiles/reconnect':return self.send_json(CONNECTIONS.reconnect(body.get('profile_id')))
+            if p=='/api/communications/test-send':return self.send_json(test_submissions.send_current(body.get('draft_id'),CONNECTIONS.writer()))
+            if p=='/api/library/apply':return self.send_json(library_settings.apply(body.get('path')))
+            if p=='/api/library/rescan':
+                if not LOCK.acquire(blocking=False):return self.send_json({'error':'Import busy'},409)
+                try: result=library_settings.rescan()
+                finally: LOCK.release()
+                background_format();return self.send_json(result)
+            if p=='/api/communications/color':return self.send_json(communications.set_color(body.get('user_id'),body.get('color')))
             m=re.fullmatch(r'/api/staging/hot/items/([0-9a-f-]{36})/remove',p)
             if m:return self.send_json(staging.remove_from_hot(m.group(1)))
             if p=='/api/staging/hot/reserve':return self.send_json(staging.reserve_hot(body.get('package_id')))
@@ -224,8 +255,19 @@ if __name__=='__main__':
         migrate(Path(os.environ['CH_LEGACY_DATA']), DATA)
     db().close()
     mobile_auth.setup()
+    CONNECTIONS.start()
     threading.Thread(target=format_worker,daemon=True).start()
     background_format()
     server=ThreadingHTTPServer(('127.0.0.1',args.port),Handler)
     print(f'CH_READY {server.server_port}',flush=True)
-    server.serve_forever()
+    def terminate(*_):
+        raise KeyboardInterrupt
+
+    signal.signal(signal.SIGTERM, terminate)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        CONNECTIONS.stop()
+        server.server_close()

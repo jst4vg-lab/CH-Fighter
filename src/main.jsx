@@ -4,6 +4,7 @@ import {Search, RefreshCw, ChevronDown, ChevronRight, SlidersHorizontal, AlertTr
 import {HotStage,ReserveStage} from './Staging.jsx';
 import './style.css';
 import Mobile from './Mobile.jsx';
+import WorkspaceShell from './WorkspaceShell.jsx';
 
 const BRANCHES={af:'Air Corps',ar:'Army',de:'Defense',ex:'Expeditionary Force',hf:'Space',mi:'Missiles',nf:'Naval'};
 const TYPES={afs:'Air Force Support',avi:'Helicopter',fgt:'Fighter',stk:'Strike Aircraft',ada:'Air Defence',art:'Artillery',asu:'Army Support',def:'Defences',fpv:'Drone',inf:'Infantry',mbt:'Tank',mob:'Mobility',frt:'Fortress',aas:'Air Assault',lan:'Orbital Drop',par:'Paratrooper',sct:'Space Combat',ses:'Space Escort',ssu:'Space Support',mis:'Missile',car:'Carrier',cbt:'Combat Ship',esc:'Escort',sub:'Submarine',tsb:'Transport',tsp:'Transport'};
@@ -21,6 +22,59 @@ function MobileSettings(){
  async function newCode(){try{setPair(await api('/mobile/pair-code'));setMessage('')}catch(e){setMessage(e.message)}}
  async function revoke(){try{await api('/mobile/revoke',{});setPair(null);setMessage('Paired phones disconnected.')}catch(e){setMessage(e.message)}}
  return <section className="settingsCard"><h2>Mobile companion</h2><p>{config?.url?<>Open <strong>{config.url}</strong> on your iPhone through Tailscale, then add it to the Home Screen.</>:'Connect Tailscale on the Framework, enable MagicDNS and HTTPS, then restart Clan Hub.'}</p><p>Serve the local app privately with <code>tailscale serve --bg {config?.port||8765}</code>. Keep the desktop app open while using the phone.</p><button onClick={newCode}>Generate pairing code</button>{pair&&<p>Pairing code: <strong>{pair.code}</strong> (valid for five minutes)</p>}<button onClick={revoke}>Disconnect paired phones</button>{message&&<p role="status">{message}</p>}</section>
+}
+function DiscordConnections(){
+ const [info,setInfo]=useState(null),[selection,setSelection]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const endpoint='/communications/profiles';
+ useEffect(()=>{
+  let active=true;
+  async function refresh(){
+   try{const value=await api(endpoint);if(active)setInfo(value)}
+   catch(e){if(active)setError(e.message)}
+  }
+  refresh();
+  const timer=setInterval(refresh,3000);
+  return()=>{active=false;clearInterval(timer)};
+ },[]);
+ async function update(action,body){
+  setBusy(true);setError('');
+  try{setInfo(await api(endpoint+action,body));setSelection(null)}
+  catch(e){setError(e.message)}
+  finally{setBusy(false)}
+ }
+ const selected=selection||info?.active;
+ return <section className="settingsCard"><h2>Discord Connections</h2>
+ {info&&['read','write'].map(direction=>{
+  const state=info[direction],id=info.active[direction];
+  const profile=info.profiles.find(profile=>profile.id===id);
+  const capabilities=state.delivery?.capabilities||state.feed?.capabilities||{};
+  return <div className="discordConnectionRow" key={direction}>
+   <label>{direction==='read'?'Incoming':'Outgoing'} <select value={selected[direction]} disabled={busy}
+    onChange={e=>setSelection({...selected,[direction]:e.target.value})}>
+    <option value="">Disabled</option>
+    {selected[direction]&&!info.profiles.some(p=>p.id===selected[direction]&&p[direction+'_enabled'])&&
+     <option value={selected[direction]}>Unavailable profile</option>}
+    {info.profiles.filter(p=>p[direction+'_enabled']).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+   </select></label>
+   <button disabled={busy||!id} onClick={()=>update('/reconnect',{profile_id:id})}>Reconnect</button>
+   <p>{[state.state?.replaceAll('_',' '),state.account?.name,state.reason||state.delivery?.reason||state.feed?.reason].filter(Boolean).join(' · ')}</p>
+   {profile&&<small>Guild {profile.guild_id||'unconfigured'} · Credential <code>{profile.token_env}</code></small>}
+   {state.feed?.channels?.length>0&&<p>{state.feed.channels.map(c=>'#'+c.name).join(', ')}</p>}
+   {state.delivery?.channel_id&&<p>Test channel {state.delivery.channel_id}</p>}
+   {Object.entries(capabilities).some(([,enabled])=>enabled)&&
+    <p>Available: {Object.entries(capabilities).filter(([,enabled])=>enabled).map(([name])=>name).join(', ')}</p>}
+  </div>
+ })}
+ <button disabled={busy||!selection} onClick={()=>update('/select',selection)}>Apply profiles</button>
+ {(error||info?.error)&&<p role="alert">{error||info.error}</p>}
+ </section>
+}
+
+function LibrarySettings({onChanged}){
+ const [info,setInfo]=useState(null),[path,setPath]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false);
+ useEffect(()=>{api('/library').then(v=>{setInfo(v);setPath(v.path)}).catch(e=>setMessage(e.message))},[]);
+ async function run(endpoint,body){setBusy(true);setMessage('');try{const v=await api(endpoint,body);setInfo(v);setPath(v.path);if(endpoint==='/library/rescan')onChanged();setMessage(endpoint==='/library/rescan'?`${v.scanned} files scanned`:'Library location saved')}catch(e){setMessage(e.message)}finally{setBusy(false)}}
+ return <section className="settingsCard librarySettings"><div className="settingsTitle"><h2>Crea Library</h2><p>One active source directory on this computer. Originals are never moved.</p></div><div className="librarySettingsBody"><label htmlFor="libraryPath">Library Location</label><div className="libraryPathRow"><input id="libraryPath" value={path} onChange={e=>setPath(e.target.value)} spellCheck="false"/><button disabled={!window.chDesktop?.chooseCreaLibrary||busy} onClick={async()=>{const selected=await window.chDesktop.chooseCreaLibrary();if(selected)setPath(selected)}}>Browse</button><button disabled={busy||!path} onClick={()=>run('/library/apply',{path})}>Apply</button></div><div className="libraryStatus"><span>{info?.available?'Available':'Library Unavailable'}</span><span>{info?.indexed_count??0} indexed assets</span><button disabled={busy} onClick={()=>run('/library/rescan',{})}>Rescan Library</button></div>{message&&<p role="status">{message}</p>}</div></section>
 }
 
 function App(){
@@ -49,7 +103,7 @@ function App(){
  return <div className={`app ${selected&&!selected.review?'assetDetailsOpen':''}`}>
   <header><div className="headerLeft"><div className="appMenuWrap" ref={menuRef}><button className={`settingsIcon ${menuOpen?'navActive':''}`} aria-label="Open app menu" aria-expanded={menuOpen} aria-controls="appMenu" title="Menu" onClick={()=>setMenuOpen(!menuOpen)}><Menu size={21}/></button>{menuOpen&&<div className="appMenu" id="appMenu"><button onClick={()=>navigate('settings')}><SlidersHorizontal size={16}/> Settings</button><button onClick={()=>{setMenuOpen(false);navigate('gallery');setSelected({review:true})}}><AlertTriangle size={16}/> Review <span>{review.length}</span></button><button disabled={saving||state.busy} onClick={()=>{setMenuOpen(false);action('/import',{})}}><RefreshCw size={16}/> Scan collection</button><button onClick={()=>{setMenuOpen(false);navigate('gallery');setUsedOpen(true)}}><Archive size={16}/> Used Crea <span>{stage.used_count||0}</span></button><div className="menuZoom" aria-label="App zoom"><span>Zoom</span><button aria-label="Zoom out" disabled={zoom<=.7} onClick={()=>changeZoom(zoom-.1)}><Minus size={15}/></button><button className="zoomValue" aria-label="Reset zoom" onClick={()=>changeZoom(1)}>{Math.round(zoom*100)}%</button><button aria-label="Zoom in" disabled={zoom>=1.5} onClick={()=>changeZoom(zoom+.1)}><Plus size={15}/></button></div></div>}</div><button className="brand" onClick={()=>navigate('gallery')}><img src="/icons/bird-mark.png" alt=""/><span><strong>CLAN HUB</strong><small>CREA MANAGER</small></span></button></div><div className="headerRight"><span className="count">{assets.length} READY · {state.counts.pending||0} PENDING</span></div></header>
   {error&&<div className="error">{error}</div>}
-  {route==='settings'?<main className="settingsPage"><button className="back" onClick={()=>navigate('gallery')}><ArrowLeft size={16}/> Gallery</button><h1>Settings</h1><section className="settingsCard"><div className="settingsTitle"><h2>Creator colors</h2><p>Colors appear on the information bar of each formatted crea. Changes update existing images.</p></div><div className="settingsRows">{state.creators.map(c=><ColorRow key={c.name} creator={c} save={saveColor} toggle={toggleCreator} saving={saving}/>)}</div></section><MobileSettings/></main>:<>
+  {route==='settings'?<main className="settingsPage"><button className="back" onClick={()=>navigate('gallery')}><ArrowLeft size={16}/> Gallery</button><h1>Settings</h1><LibrarySettings onChanged={refresh}/><DiscordConnections/><section className="settingsCard"><div className="settingsTitle"><h2>Creator colors</h2><p>Colors appear on the information bar of each formatted crea. Changes update existing images.</p></div><div className="settingsRows">{state.creators.map(c=><ColorRow key={c.name} creator={c} save={saveColor} toggle={toggleCreator} saving={saving}/>)}</div></section><MobileSettings/></main>:<>
    {missing.length>0&&<section className="colors"><div><strong>Assign creator colors</strong><p>Choose a color before formatting each creator’s images.</p></div><div className="colorrows">{missing.map(c=><ColorRow key={c.name} creator={c} save={saveColor} saving={saving}/>)}</div></section>}
    <div className="toolbar"><div className="search"><Search size={17}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search crea, code, BP…"/></div><select value={creator} onChange={e=>setCreator(e.target.value)}><option value="all">All creators</option>{state.creators.filter(c=>c.enabled!==0).map(c=><option key={c.name}>{c.name}</option>)}</select></div>
    <HotStage snapshot={stage} onChanged={refresh}/>
@@ -60,4 +114,4 @@ function App(){
   </>}
  </div>
 }
-createRoot(document.getElementById('root')).render(location.pathname==='/mobile'?<Mobile/>:<App/>);
+createRoot(document.getElementById('root')).render(location.pathname==='/mobile'?<Mobile/>:<WorkspaceShell><App/></WorkspaceShell>);

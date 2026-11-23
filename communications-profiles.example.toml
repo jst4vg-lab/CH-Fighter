@@ -1,0 +1,18 @@
+# Copy to $CH_DATA_DIR/communications-profiles.toml.
+# Credentials belong in backend .env, never here.
+[profiles.war_monitor]
+name = "War Monitor"
+provider = "discord_bot"
+token_env = "DISCORD_WAR_BOT_TOKEN"
+guild_id = "111111111111111111"
+read_enabled = true
+write_enabled = false
+
+[profiles.test_bot]
+name = "Test Bot"
+provider = "discord_bot"
+token_env = "DISCORD_TEST_BOT_TOKEN"
+guild_id = "222222222222222222"
+channel_id = "333333333333333333"
+read_enabled = true
+write_enabled = true

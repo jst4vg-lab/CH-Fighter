@@ -50,6 +50,8 @@ class MobileAuthTests(unittest.TestCase):
         token = mobile_auth.pair(mobile_auth.new_code()['code'])
         handler.headers['Cookie'] = f'ch_mobile={token}'
         self.assertTrue(handler.allowed('GET', '/api/staging'))
+        self.assertFalse(handler.allowed('GET', '/api/workspace/draft'))
+        self.assertFalse(handler.allowed('POST', '/api/workspace/draft'))
         handler.path = '/api/assets?status=used'
         self.assertFalse(handler.allowed('GET', '/api/assets'))
         handler.path = '/api/assets'

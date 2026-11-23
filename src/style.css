@@ -60,6 +60,7 @@ header{position:relative;z-index:10}
 
 /* Compact submission editor and serif UI. */
 :root{font-family:Georgia,'Times New Roman',serif}
+.librarySettings{margin-bottom:18px}.librarySettingsBody{padding:18px 26px}.libraryPathRow,.libraryStatus{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:10px}.libraryPathRow input{flex:1;min-width:180px;padding:9px;color:#F0EEE5;background:#171B16;border:1px solid #56644B;border-radius:5px}.libraryStatus{justify-content:space-between;color:#C6C4B4;font-size:13px}
 .card{line-height:0}
 .card img{width:100%;aspect-ratio:1;object-fit:cover}
 .hotStageRow .hotControls{flex:0 0 auto;gap:6px}

@@ -46,6 +46,11 @@ def db():
     create unique index if not exists one_hot_package on packages(location) where location='hot';
     create table if not exists package_items(package_id text not null references packages(id) on delete cascade, asset_id text not null references assets(id), position integer not null, missing integer not null default 0, primary key(package_id,asset_id));
     create table if not exists deployments(id text primary key,created_at text not null default current_timestamp,before_json text not null,after_json text not null,undone integer not null default 0);
+    create table if not exists workspace_drafts(id text primary key, text text not null default '', asset_ids_json text not null default '[]', status text not null default 'draft' check(status in ('draft','prepared','handoff_pending','sent_confirmed','failed_unverified')), channel_url text not null default '', active integer not null default 1, created_at text not null default current_timestamp, updated_at text not null default current_timestamp);
+    create table if not exists app_settings(key text primary key,value text not null);
+    create table if not exists member_colors(user_id text primary key,color text not null);
+    create table if not exists workspace_test_sends(draft_id text primary key references workspace_drafts(id),channel_id text not null,status text not null,message_id text,sender_id text,error text,updated_at text not null default current_timestamp);
+    create unique index if not exists one_active_workspace_draft on workspace_drafts(active) where active=1;
     ''')
     if 'used' not in {r['name'] for r in con.execute('pragma table_info(assets)')}:
         con.execute('alter table assets add column used integer not null default 0')
@@ -53,7 +58,19 @@ def db():
     if 'enabled' not in {r['name'] for r in con.execute('pragma table_info(creators)')}:
         con.execute('alter table creators add column enabled integer not null default 1')
         con.commit()
+    if 'reply_to_id' not in {r['name'] for r in con.execute('pragma table_info(workspace_drafts)')}:
+        con.execute("alter table workspace_drafts add column reply_to_id text not null default ''")
+        con.commit()
+    if 'guild_id' not in {r['name'] for r in con.execute('pragma table_info(workspace_test_sends)')}:
+        con.execute('alter table workspace_test_sends add column guild_id text')
+    con.execute('insert or ignore into app_settings(key,value) values(?,?)',('library_source',str(SOURCE)))
+    con.commit()
     return con
+
+def source_path():
+    con=db()
+    try: return Path(con.execute("select value from app_settings where key='library_source'").fetchone()[0])
+    finally: con.close()
 
 def visible_assets(status='ready'):
     con=db()
@@ -67,7 +84,8 @@ def visible_assets(status='ready'):
     finally:
         con.close()
 
-def eligible_files(source=SOURCE):
+def eligible_files(source=None):
+    source=source or source_path()
     for path in sorted(source.rglob('*')):
         if not path.is_file() or path.is_symlink(): continue
         parts = path.relative_to(source).parts
@@ -80,7 +98,8 @@ def digest(path):
         for part in iter(lambda:f.read(1024*1024),b''): h.update(part)
     return h.hexdigest()
 
-def parse(path, source=SOURCE):
+def parse(path, source=None):
+    source=source or source_path()
     rel=path.relative_to(source)
     m=PATTERN.fullmatch(path.stem)
     if not m: return None, 'Invalid filename metadata'
@@ -92,7 +111,9 @@ def parse(path, source=SOURCE):
     if branch=='mi' and typ!='mis': return None, 'Missiles must use type mis'
     return {'branch':branch,'type':typ,'creator':creator,'bp':int(d['bp']) if d['bp'] else None,'seq':int(d['seq'])}, None
 
-def scan(source=SOURCE):
+def scan(source=None):
+    source=source or source_path()
+    if not source.is_dir(): raise ValueError('Library Unavailable: source directory is not accessible')
     con=db()
     count=0; issues=0
     for path in eligible_files(source):
@@ -107,9 +128,14 @@ def scan(source=SOURCE):
         hash_value=digest(path)
         old=con.execute('select sha256 from assets where relpath=?',(rel,)).fetchone()
         if old and old['sha256']==hash_value: count+=1; continue
-        duplicate=con.execute('select relpath from assets where sha256=? and relpath!=? limit 1',(hash_value,rel)).fetchone()
-        if duplicate:
-            fields=None; issue=f'Exact duplicate of {duplicate[0]}'
+        matches=con.execute('select id,relpath from assets where sha256=? and relpath!=?',(hash_value,rel)).fetchall()
+        if not old and len(matches)==1 and not (source/matches[0]['relpath']).exists():
+            # A uniquely identified move retains package, usage, and formatting references.
+            con.execute('update assets set relpath=? where id=?',(rel,matches[0]['id']))
+            old=con.execute('select sha256 from assets where relpath=?',(rel,)).fetchone()
+            if old['sha256']==hash_value: count+=1; continue
+        if matches:
+            fields=None; issue='Ambiguous duplicate content' if len(matches)>1 else f'Exact duplicate of {matches[0]["relpath"]}'
         aid=str(uuid.uuid5(uuid.NAMESPACE_URL, rel))
         values=fields or {}
         if fields: con.execute('insert or ignore into creators(name) values(?)',(fields['creator'],))
@@ -124,7 +150,8 @@ def scan(source=SOURCE):
     con.commit(); con.close()
     return {'scanned':count,'new_issues':issues}
 
-def render_asset(a, color, source=SOURCE, formatted=FORMATTED, thumbs=THUMBS):
+def render_asset(a, color, source=None, formatted=FORMATTED, thumbs=THUMBS):
+    source=source or source_path()
     from type_icons import draw_icon
     key=hashlib.sha256(json.dumps([a['sha256'],a['mode'],a['focal_x'],a['focal_y'],a['type'],a['bp'],color,RENDER_VERSION]).encode()).hexdigest()
     output=formatted/f"{a['id']}.jpg"; thumb=thumbs/f"{a['id']}.jpg"
@@ -174,11 +201,13 @@ def atomic_jpeg(im,path,quality):
         tmp.unlink(missing_ok=True)
 
 def format_pending(limit=None):
+    if not source_path().is_dir(): return 0
     con=db(); rows=con.execute('''select a.*,c.color from assets a join creators c on c.name=a.creator
       where a.status in ('pending','ready') and c.color is not null order by a.relpath''').fetchall()
     done=0
     for a in rows:
         if limit is not None and done>=limit: break
+        if not (source_path()/a['relpath']).is_file(): continue
         try:
             key=render_asset(a,a['color'])
             con.execute("update assets set render_key=?,status='ready',issue=null where id=?",(key,a['id']))

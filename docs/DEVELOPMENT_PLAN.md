@@ -1,5 +1,15 @@
 # Development plan
 
+## Milestone 2 status
+
+The read-only provider, normalized event cache, custom desktop feed, local name-color preference, and host Crea Library setting are implemented. Live Discord permissions, message-content intent, role/member completeness, attachment rendering, and KDE behavior still require a configured bot and user testing. The outgoing provider remains disabled by default; a production write provider with transactional Used Crea transition is a later milestone. Focused Mode currently filters exact author IDs and direct reply references. Enhanced role gradients, richer reply previews, and complete event recovery after a long offline period remain future work. Do not use a user account token.
+
+An authorized write-bot provider now supports explicit, test-channel-only text, formatted files, and reply sends when separately configured. It records acknowledgment IDs but deliberately does not change Used Crea. Live test-channel behavior remains unverified until a write bot and channel are configured. The next milestone should connect an authorized production send to the existing deployment transaction only after its identity, permission, and recovery behavior are field-tested.
+
+## Command Suite transition
+
+Milestone 1 adds the capability-aware communications adapter, isolated manual Discord `WebContentsView` experiment with external fallback, resizable desktop workspace, and persistent local drafts and handoff states. Keep the Crea Manager and mobile companion operational. Live Discord login, attachment, send, session persistence, and KDE display checks require user testing; the view is not a message API. Milestone 2 should evaluate those results, then connect local handoff records to legacy staging confirmation in one transaction and introduce only authorized messaging capabilities where available. Do not add message parsing, AI agents, maps, or intelligence automation in Milestone 1.
+
 The desktop packaging milestone wraps the existing React UI in Electron, bundles the Python backend, and installs a Fedora RPM. Verify KDE Wayland startup and data migration before the native Discord drag milestone.
 
 1. Current: inventory, safe import, image formatting, creator colors, and responsive gallery.
@@ -13,3 +23,5 @@ Mobile companion implemented as an authenticated private Tailscale web app while
 Mobile touch interaction overhaul implemented in the React build: Embla branch slides, three-column collapsible type sections, layered Reserve decks, and hold-to-drag package moves. The Hot-to-Reserve backend action now accepts an expected package ID to reject a stale phone gesture. Verify finger tracking, vertical and diagonal scrolling, cancellation, disconnection, and Home Screen behavior on an iPhone before calling this milestone field-tested.
 
 Mobile Send now follows desktop's two-step clipboard and confirmation flow. The phone arms Confirm sent only after the Framework reports clipboard success; Hot changes or disconnection reset it. Backend confirmation checks the copied package and asset IDs in the same transaction that marks crea used and replenishes Reserve. Verify the full copy, paste, confirm, and undo sequence on the paired phone and desktop.
+
+The connection profile milestone adds independent saved read and write selections, shared bot clients, and Discord status in desktop Settings. Validate each real bot's intents and channel permissions before enabling test delivery. Production delivery remains a separate milestone.

@@ -1,5 +1,7 @@
 # Product specification
 
+The Command Suite desktop foundation places the existing Crea Manager on the left and an experimental manual Communications view on the right. The divider is resizable; narrow windows switch between regions. A local submission draft stores text, selected asset IDs, a Discord channel link, and a handoff status even when Discord is unavailable. The communications view cannot read, send, or confirm messages through an application API. The existing Hot confirmation remains the operation that marks crea used. See `COMMAND_SUITE_ARCHITECTURE.md` for the Milestone 1 boundary.
+
 The first milestone provides a local formatted crea gallery. It reads `Crea/` without changing source files and excludes Repost and Misc folders. Metadata comes from filename codes; missing or conflicting metadata appears in import review. Missiles is a single-type branch.
 
 Each derived image is a 1920×1920 JPEG at quality 92. Artwork occupies the top 1920×1680 area. Default placement enlarges the complete source image to fit without cropping; remaining space shows a blurred, darkened cover copy of the source. A per-asset editor can instead crop to fill using horizontal and vertical focal positions. The bottom 240 px bar uses a saved creator color, a type symbol and large three-letter type code on the left, and a large `N BP` count at the far right when present. A creator with no saved color prompts for one before its images are formatted.

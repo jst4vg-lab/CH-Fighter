@@ -1,4 +1,4 @@
-const { app, BrowserWindow, dialog, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, WebContentsView, session, dialog, ipcMain, shell } = require('electron');
 const { spawn, execFileSync } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
 const fs = require('node:fs');
@@ -7,6 +7,7 @@ const os = require('node:os');
 const { resolveDragFiles } = require('./drag-files.cjs');
 const { discordUsesFlatpak, exportForDiscord } = require('./document-portal.cjs');
 const { syncHotFolder } = require('./hot-folder.cjs');
+const { CAPABILITIES, channelUrl, createAdapter } = require('./communications.cjs');
 
 const project = path.resolve(__dirname, '..');
 let backend;
@@ -28,6 +29,100 @@ let folderPollPending = false;
 let clipboardHelper;
 let clipboardQueue = Promise.resolve();
 let clipboardPollPending = false;
+let discordView;
+let communicationsStatus = 'idle';
+const discordHome = 'https://discord.com/channels/@me';
+
+function reportCommunications(status) {
+  communicationsStatus = status;
+  if (status.startsWith('failed') && discordView) discordView.setVisible(false);
+  if (process.env.CH_COMMUNICATIONS_DIAGNOSTIC === '1') console.info('Communications view:', status);
+  if (window && !window.isDestroyed()) window.webContents.send('communications-status', status);
+}
+
+function ensureDiscordView() {
+  if (discordView) return discordView;
+  const isolated = session.fromPartition('persist:ch-command-discord');
+  isolated.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
+  isolated.webRequest.onBeforeRequest({ urls: ['http://127.0.0.1:*/*', 'http://localhost:*/*', 'file://*/*'] },
+    (_details, callback) => callback({ cancel: true }));
+  const remotePreferences = {
+    session: isolated, nodeIntegration: false, contextIsolation: true, sandbox: true,
+    webSecurity: true, webviewTag: false
+  };
+  const view = new WebContentsView({ webPreferences: remotePreferences });
+  if (process.env.CH_COMMUNICATIONS_DIAGNOSTIC === '1') {
+    console.info('Communications isolation:', JSON.stringify({ separateSession: isolated !== window.webContents.session,
+      nodeIntegration: remotePreferences.nodeIntegration, contextIsolation: remotePreferences.contextIsolation,
+      sandbox: remotePreferences.sandbox, webSecurity: remotePreferences.webSecurity, preload: Boolean(remotePreferences.preload) }));
+  }
+  view.setVisible(false);
+  view.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('https://')) shell.openExternal(url).catch(() => {});
+    return { action: 'deny' };
+  });
+  view.webContents.on('will-navigate', (event, url) => {
+    try {
+      const target = new URL(url);
+      if (target.protocol === 'https:' && target.hostname === 'discord.com') return;
+    } catch {}
+    event.preventDefault();
+    if (url.startsWith('https://')) shell.openExternal(url).catch(() => {});
+  });
+  view.webContents.on('did-finish-load', () => reportCommunications('loaded'));
+  view.webContents.on('did-fail-load', (_event, code, description, _url, isMainFrame) => {
+    if (isMainFrame && code !== -3) reportCommunications(`failed: ${description}`);
+  });
+  window.contentView.addChildView(view);
+  discordView = view;
+  reportCommunications('loading');
+  view.webContents.loadURL(discordHome).catch(error => reportCommunications(`failed: ${error.message}`));
+  return view;
+}
+
+const externalCommunications = createAdapter(url => shell.openExternal(url));
+
+if (process.env.CH_DIAGNOSTIC_USER_DATA) {
+  const diagnosticPath = path.resolve(process.env.CH_DIAGNOSTIC_USER_DATA);
+  if (!diagnosticPath.startsWith('/tmp/')) throw Error('Diagnostic user data must be under /tmp');
+  fs.mkdirSync(diagnosticPath, { recursive: true });
+  app.setName('CH Command Suite Diagnostic');
+  app.setPath('userData', diagnosticPath);
+}
+
+ipcMain.handle('communications-capabilities', event => {
+  if (!trusted(event)) throw Error('Untrusted communications request');
+  return { ...CAPABILITIES, display: 'experimental_embedded', status: communicationsStatus };
+});
+ipcMain.handle('choose-crea-library', async event => {
+  if (!trusted(event)) throw Error('Untrusted library request');
+  const result=await dialog.showOpenDialog(window,{title:'Select Crea Library',properties:['openDirectory']});
+  return result.canceled ? null : result.filePaths[0];
+});
+ipcMain.handle('communications-bounds', (event, bounds) => {
+  if (!trusted(event)) throw Error('Untrusted communications request');
+  if (bounds === null) { if (discordView) discordView.setVisible(false); return communicationsStatus; }
+  const [width, height] = window.getContentSize();
+  if (!bounds || !['x', 'y', 'width', 'height'].every(key => Number.isFinite(bounds[key])) ||
+      bounds.x < 0 || bounds.y < 0 || bounds.width < 0 || bounds.height < 0 ||
+      bounds.x + bounds.width > width + 2 || bounds.y + bounds.height > height + 2) throw Error('Invalid view bounds');
+  const view = ensureDiscordView();
+  view.setBounds(Object.fromEntries(['x', 'y', 'width', 'height'].map(key => [key, Math.round(bounds[key])])));
+  view.setVisible(bounds.width > 0 && bounds.height > 0 && !communicationsStatus.startsWith('failed'));
+  return communicationsStatus;
+});
+ipcMain.handle('communications-external', async (event, url) => {
+  if (!trusted(event)) throw Error('Untrusted communications request');
+  return externalCommunications.navigateChannel(url || discordHome);
+});
+ipcMain.handle('communications-navigate', async (event, url) => {
+  if (!trusted(event)) throw Error('Untrusted communications request');
+  const safe = channelUrl(url);
+  if (!safe) return { ok: false, code: 'invalid_channel' };
+  if (!discordView || communicationsStatus.startsWith('failed')) return { ok: false, code: 'unsupported' };
+  await discordView.webContents.loadURL(safe);
+  return { ok: true };
+});
 
 function copyHotPackage(packageId) {
   const next = clipboardQueue.catch(() => {}).then(async () => {
@@ -140,7 +235,9 @@ ipcMain.handle('copy-hot-package', async (event, packageId) => {
   return copyHotPackage(packageId);
 });
 
-if (!app.requestSingleInstanceLock()) app.quit();
+const hasInstanceLock = app.requestSingleInstanceLock();
+if (process.env.CH_COMMUNICATIONS_DIAGNOSTIC === '1') console.info('Communications diagnostic instance lock:', hasInstanceLock);
+if (!hasInstanceLock) app.quit();
 else {
   app.on('second-instance', () => { if (window) { window.show(); window.focus(); } });
   app.whenReady().then(start);
@@ -164,8 +261,9 @@ function start() {
   } catch { /* Tailscale is optional until mobile setup. */ }
   remoteHost ||= (process.env.CH_REMOTE_HOST || '').toLowerCase();
   let sourcePath = source;
-  try { sourcePath = JSON.parse(fs.readFileSync(config, 'utf8')).source; } catch {}
-  if (!fs.existsSync(sourcePath)) {
+  let hasSavedSource=false;
+  try { sourcePath = JSON.parse(fs.readFileSync(config, 'utf8')).source;hasSavedSource=true; } catch {}
+  if (!hasSavedSource && !fs.existsSync(sourcePath)) {
     const choice = dialog.showOpenDialogSync({ title: 'Select the original Crea folder', properties: ['openDirectory'] });
     if (!choice) { app.quit(); return; }
     sourcePath = choice[0];
@@ -189,15 +287,13 @@ function start() {
     if (match && !ready) {
       ready = true;
       appOrigin = `http://127.0.0.1:${match[1]}`;
-      app.on('web-contents-created', (_event, contents) => {
-        contents.session.webRequest.onBeforeSendHeaders({ urls: [`${appOrigin}/*`] }, (details, callback) => {
-          details.requestHeaders['X-CH-Desktop'] = desktopSecret;
-          callback({ requestHeaders: details.requestHeaders });
-        });
-      });
       window = new BrowserWindow({ width: 1440, height: 900, minWidth: 420, minHeight: 520,
         icon: path.join(resources, 'public', 'icons', 'icon-512.png'),
         webPreferences: { preload: path.join(__dirname, 'preload.cjs'), nodeIntegration: false, contextIsolation: true, sandbox: true } });
+      window.webContents.session.webRequest.onBeforeSendHeaders({ urls: [`${appOrigin}/*`] }, (details, callback) => {
+        details.requestHeaders['X-CH-Desktop'] = desktopSecret;
+        callback({ requestHeaders: details.requestHeaders });
+      });
       window.loadURL(`${appOrigin}/`);
       refreshHotFolder().catch(error => console.error('Hot folder sync failed:', error));
       const folderTimer = setInterval(() => {
@@ -210,7 +306,7 @@ function start() {
       window.on('closed', () => clearInterval(folderTimer));
       window.on('closed', () => clearInterval(clipboardTimer));
       window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-      window.on('closed', () => app.quit());
+      window.on('closed', () => { if (discordView) { if (!discordView.webContents.isDestroyed()) discordView.webContents.close(); discordView = null; } app.quit(); });
     }
   });
   backend.stderr.on('data', chunk => { errors += chunk.toString(); });

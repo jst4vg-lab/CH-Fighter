@@ -1,5 +1,7 @@
 # Architecture
 
+This document records the Crea Manager implementation preserved during the Command Suite transition. See `COMMAND_SUITE_ARCHITECTURE.md` for the current Milestone 1 module and communications boundaries.
+
 The installed Electron desktop window starts the bundled Python backend on an ephemeral loopback port and stops it on exit. The backend remains the SQLite state owner. Desktop data lives under `$XDG_DATA_HOME/clan-hub-crea-manager`; first launch copies legacy `data/` without deleting it. The source collection stays read only and is configured separately. The web build remains for future mobile synchronization.
 
 The Linux desktop launcher passes `--ozone-platform=x11` so Electron uses XWayland. A minimal external-drag experiment showed that native Wayland yielded an empty receiver payload for both `file` and `files: [file]`, while XWayland delivered readable formatted JPEGs from both host and Flatpak portal paths. The backend, source library, and database remain unchanged by this display choice.
